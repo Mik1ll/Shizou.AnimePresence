@@ -16,18 +16,17 @@ public class MpvPipeClient : IDisposable
     // ReSharper restore InconsistantNaming
 
     private readonly NamedPipeClientStream _pipeClientStream;
+    private readonly int _timeout = 500;
 
     public MpvPipeClient(string serverPath)
     {
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.None, TokenImpersonationLevel.Anonymous);
-        _pipeClientStream.ReadTimeout = 500;
-        _pipeClientStream.WriteTimeout = 500;
     }
 
-    public void Connect()
+    private void Connect()
     {
         if (!_pipeClientStream.IsConnected)
-            _pipeClientStream.Connect(TimeSpan.FromMilliseconds(500));
+            _pipeClientStream.Connect(_timeout);
     }
 
     private Request NewRequest(params string[] command)
@@ -60,6 +59,7 @@ public class MpvPipeClient : IDisposable
                 ms.Write(buffer, 0, bytesRead);
             } while (bytesRead != 0 && buffer[bytesRead - 1] != '\n');
 
+            ms.Position = 0;
             var response = JsonSerializer.Deserialize<Response>(ms);
             if (response?.request_id != request.request_id)
                 return (null, "Request ID does not match");
