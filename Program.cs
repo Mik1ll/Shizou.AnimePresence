@@ -1,11 +1,13 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
+using System.Reflection;
+using System.Runtime.InteropServices;
 using Discord;
 using Shizou.MpvDiscordPresence;
 
-//var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
+NativeLibrary.SetDllImportResolver(Assembly.GetExecutingAssembly(), DllImportResolver);
 
-//var activityManager = discord.ActivityManagerInstance;
+var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
 
 using var client = new MpvPipeClient("tmp/mpvsocket");
 
@@ -37,7 +39,25 @@ while (true)
     };
 
 
-    //activityManager.UpdateActivity(activity, result => {});
+    discord.GetActivityManager().UpdateActivity(activity, _ => { });
+    discord.RunCallbacks();
 
-    Thread.Sleep(TimeSpan.FromSeconds(4));
+    Thread.Sleep(TimeSpan.FromSeconds(5));
+}
+
+static IntPtr DllImportResolver(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+{
+    if (libraryName == Constants.DllName)
+    {
+        // On systems with AVX2 support, load a different library.
+        if (RuntimeInformation.ProcessArchitecture == Architecture.X64)
+            return NativeLibrary.Load("DiscordGameSDK/lib/x86_64/" + Constants.DllName, assembly, searchPath);
+        if (RuntimeInformation.ProcessArchitecture == Architecture.Arm64)
+            return NativeLibrary.Load("DiscordGameSDK/lib/aarch64/" + Constants.DllName, assembly, searchPath);
+        if (RuntimeInformation.ProcessArchitecture == Architecture.X86)
+            return NativeLibrary.Load("DiscordGameSDK/lib/x86/" + Constants.DllName, assembly, searchPath);
+    }
+
+    // Otherwise, fallback to default import resolver.
+    return IntPtr.Zero;
 }

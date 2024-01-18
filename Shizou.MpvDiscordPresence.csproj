@@ -11,4 +11,10 @@
         <Folder Include="DiscordGameSDK\" />
     </ItemGroup>
 
+    <ItemGroup>
+        <None Include="DiscordGameSDK\lib\**">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
 </Project>
