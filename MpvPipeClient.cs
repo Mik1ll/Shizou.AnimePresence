@@ -42,13 +42,11 @@ public class MpvPipeClient : IDisposable
     public string GetPropertyString(string key)
     {
         var request = NewRequest("get_property_string", key);
-        var (response, error) = ExecuteQuery(request);
-        if (error is not null)
-            return "";
+        var response = ExecuteQuery(request);
         return response?.GetString() ?? "";
     }
 
-    private (JsonElement? data, string? error) ExecuteQuery(Request request)
+    private JsonElement? ExecuteQuery(Request request)
     {
         lock (_exchangeLock)
         {
@@ -64,32 +62,26 @@ public class MpvPipeClient : IDisposable
             _pipeClientStream.Write(requestBytes);
         }
 
-        (JsonElement? data, string? error) ReceiveResponse()
+        JsonElement ReceiveResponse()
         {
-            try
-            {
-                var buffer = new byte[1024];
-                var bytesRead = 0;
+            var buffer = new byte[1024];
+            var bytesRead = 0;
 
-                using var ms = new MemoryStream();
-                do
-                {
-                    bytesRead += _pipeClientStream.Read(buffer, 0, buffer.Length);
-                    ms.Write(buffer, 0, bytesRead);
-                } while (bytesRead != 0 && buffer[bytesRead - 1] != '\n');
-
-                ms.Position = 0;
-                var response = JsonSerializer.Deserialize<Response>(ms);
-                if (response?.request_id != request.request_id)
-                    return (null, "Request ID does not match");
-                if (response.error != "success")
-                    return (null, "Response returned error");
-                return (response.data, null);
-            }
-            catch (Exception ex)
+            using var ms = new MemoryStream();
+            do
             {
-                return (null, $"Read threw exception: {ex}");
-            }
+                bytesRead += _pipeClientStream.Read(buffer, 0, buffer.Length);
+                ms.Write(buffer, 0, bytesRead);
+            } while (bytesRead != 0 && buffer[bytesRead - 1] != '\n');
+
+            ms.Position = 0;
+            var response = JsonSerializer.Deserialize<Response>(ms) ?? throw new JsonException("Json response empty");
+            if (response.request_id != request.request_id)
+                throw new InvalidOperationException("Request ID did not match");
+            if (response.error != "success")
+                throw new InvalidOperationException(
+                    $"Response for request: ({string.Join(',', request.command)}) returned an error {response.error} ({response.data})");
+            return response.data;
         }
     }
 
