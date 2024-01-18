@@ -39,14 +39,21 @@ public class MpvPipeClient : IDisposable
         return new Request(command, _nextRequestId);
     }
 
+    public JsonElement GetProperty(string key)
+    {
+        var request = NewRequest("get_property", key);
+        var response = ExecuteQuery(request);
+        return response;
+    }
+
     public string GetPropertyString(string key)
     {
         var request = NewRequest("get_property_string", key);
         var response = ExecuteQuery(request);
-        return response?.GetString() ?? "";
+        return response.GetString() ?? "";
     }
 
-    private JsonElement? ExecuteQuery(Request request)
+    private JsonElement ExecuteQuery(Request request)
     {
         lock (_exchangeLock)
         {
