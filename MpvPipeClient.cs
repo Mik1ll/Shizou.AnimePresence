@@ -10,13 +10,17 @@ public class MpvPipeClient : IDisposable
     private int _nextRequestId;
 
     // ReSharper disable InconsistentNaming
+    // ReSharper disable once NotAccessedPositionalProperty.Local
     private record Request(string[] command, int request_id);
 
+    // ReSharper disable once ClassNeverInstantiated.Local
     private record Response(string error, JsonElement data, int request_id);
     // ReSharper restore InconsistantNaming
 
     private readonly NamedPipeClientStream _pipeClientStream;
     private readonly int _timeout = 500;
+    private readonly object _exchangeLock = new();
+    private readonly Random _random = new();
 
     public MpvPipeClient(string serverPath)
     {
@@ -31,54 +35,62 @@ public class MpvPipeClient : IDisposable
 
     private Request NewRequest(params string[] command)
     {
-        _nextRequestId++;
+        _nextRequestId = _random.Next();
         return new Request(command, _nextRequestId);
     }
 
     public string GetPropertyString(string key)
     {
         var request = NewRequest("get_property_string", key);
-        SendRequest(request);
-        var (response, error) = ReceiveResponse(request);
+        var (response, error) = ExecuteQuery(request);
         if (error is not null)
             return "";
         return response?.GetString() ?? "";
     }
 
-    private (JsonElement? data, string? error) ReceiveResponse(Request request)
+    private (JsonElement? data, string? error) ExecuteQuery(Request request)
     {
-        try
+        lock (_exchangeLock)
         {
-            var buffer = new byte[1024];
-            var bytesRead = 0;
+            SendRequest();
+            return ReceiveResponse();
+        }
 
-            using var ms = new MemoryStream();
-            do
+        void SendRequest()
+        {
+            Connect();
+            var requestJson = JsonSerializer.Serialize(request) + '\n';
+            var requestBytes = Encoding.UTF8.GetBytes(requestJson);
+            _pipeClientStream.Write(requestBytes);
+        }
+
+        (JsonElement? data, string? error) ReceiveResponse()
+        {
+            try
             {
-                bytesRead += _pipeClientStream.Read(buffer, 0, buffer.Length);
-                ms.Write(buffer, 0, bytesRead);
-            } while (bytesRead != 0 && buffer[bytesRead - 1] != '\n');
+                var buffer = new byte[1024];
+                var bytesRead = 0;
 
-            ms.Position = 0;
-            var response = JsonSerializer.Deserialize<Response>(ms);
-            if (response?.request_id != request.request_id)
-                return (null, "Request ID does not match");
-            if (response.error != "success")
-                return (null, "Response returned error");
-            return (response.data, null);
-        }
-        catch (Exception ex)
-        {
-            return (null, $"Read threw exception: {ex}");
-        }
-    }
+                using var ms = new MemoryStream();
+                do
+                {
+                    bytesRead += _pipeClientStream.Read(buffer, 0, buffer.Length);
+                    ms.Write(buffer, 0, bytesRead);
+                } while (bytesRead != 0 && buffer[bytesRead - 1] != '\n');
 
-    private void SendRequest(Request request)
-    {
-        Connect();
-        var requestJson = JsonSerializer.Serialize(request) + '\n';
-        var requestBytes = Encoding.UTF8.GetBytes(requestJson);
-        _pipeClientStream.Write(requestBytes);
+                ms.Position = 0;
+                var response = JsonSerializer.Deserialize<Response>(ms);
+                if (response?.request_id != request.request_id)
+                    return (null, "Request ID does not match");
+                if (response.error != "success")
+                    return (null, "Response returned error");
+                return (response.data, null);
+            }
+            catch (Exception ex)
+            {
+                return (null, $"Read threw exception: {ex}");
+            }
+        }
     }
 
     public void Dispose()
