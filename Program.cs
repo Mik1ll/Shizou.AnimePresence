@@ -11,19 +11,29 @@ var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequi
 
 using var client = new MpvPipeClient("tmp/mpvsocket");
 
-while (true)
+for (;; Thread.Sleep(TimeSpan.FromSeconds(5)))
 {
-    var playlistCount = client.GetProperty("playlist-count").GetInt32();
-    var playlistPos = playlistCount > 1 ? client.GetProperty("playlist-pos").GetInt32() : 0;
+    var playlistPos = client.GetProperty("playlist-pos").GetInt32();
     var position = client.GetProperty("time-pos").GetDouble();
     var duration = client.GetProperty("duration").GetDouble();
     var paused = client.GetProperty("pause").GetBoolean();
     var playlistTitle = client.GetPropertyString($"playlist/{playlistPos}/title");
+    var splitIdx = playlistTitle.LastIndexOf('-');
+    var title = playlistTitle[..splitIdx].Trim();
+    var epNo = playlistTitle[splitIdx..].Trim();
 
     var activity = new Activity
     {
-        Details = playlistTitle,
-        State = "Placeholder", // Will use episode number here later
+        Details = title,
+        State = epNo[0] switch
+        {
+            'S' => "Special " + epNo[1..],
+            'C' => "Credit " + epNo[1..],
+            'T' => "Trailer " + epNo[1..],
+            'P' => "Parody " + epNo[1..],
+            'O' => "Other " + epNo[1..],
+            _ => "Episode " + epNo
+        },
         Timestamps = new ActivityTimestamps
         {
             Start = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(position)).ToUnixTimeSeconds(),
@@ -41,8 +51,6 @@ while (true)
 
     discord.GetActivityManager().UpdateActivity(activity, _ => { });
     discord.RunCallbacks();
-
-    Thread.Sleep(TimeSpan.FromSeconds(5));
 }
 
 static IntPtr DllImportResolver(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
