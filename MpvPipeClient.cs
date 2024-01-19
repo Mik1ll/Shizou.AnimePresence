@@ -14,10 +14,12 @@ public class MpvPipeClient : IDisposable
     private record Request(string[] command, int request_id);
 
     // ReSharper disable once ClassNeverInstantiated.Local
-    private record Response(string error, JsonElement data, int request_id);
+    // ReSharper disable once NotAccessedPositionalProperty.Local
+    private record Response(string? error, JsonElement? data, int? request_id, string? @event);
     // ReSharper restore InconsistantNaming
 
     private readonly NamedPipeClientStream _pipeClientStream;
+    private readonly StreamReader _lineReader;
     private readonly int _timeout = 500;
     private readonly object _exchangeLock = new();
     private readonly Random _random = new();
@@ -25,6 +27,7 @@ public class MpvPipeClient : IDisposable
     public MpvPipeClient(string serverPath)
     {
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.None, TokenImpersonationLevel.Anonymous);
+        _lineReader = new StreamReader(_pipeClientStream);
     }
 
     private void Connect()
@@ -72,29 +75,25 @@ public class MpvPipeClient : IDisposable
 
         JsonElement ReceiveResponse()
         {
-            var buffer = new byte[1024];
-            var bytesRead = 0;
-
-            using var ms = new MemoryStream();
+            Response response;
             do
             {
-                bytesRead += _pipeClientStream.Read(buffer, 0, buffer.Length);
-                ms.Write(buffer, 0, bytesRead);
-            } while (bytesRead != 0 && buffer[bytesRead - 1] != '\n');
+                var line = _lineReader.ReadLine() ?? throw new JsonException("Json response empty");
+                response = JsonSerializer.Deserialize<Response>(line) ?? throw new JsonException("Json response empty");
+            } while (response.@event is not null);
 
-            ms.Position = 0;
-            var response = JsonSerializer.Deserialize<Response>(ms) ?? throw new JsonException("Json response empty");
             if (response.request_id != request.request_id)
                 throw new InvalidOperationException("Request ID did not match");
             if (response.error != "success")
                 throw new InvalidOperationException(
                     $"Response for request: ({string.Join(',', request.command)}) returned an error {response.error} ({response.data})");
-            return response.data;
+            return response.data!.Value;
         }
     }
 
     public void Dispose()
     {
         _pipeClientStream.Dispose();
+        _lineReader.Dispose();
     }
 }
