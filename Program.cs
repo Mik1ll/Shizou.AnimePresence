@@ -1,15 +1,13 @@
-﻿// See https://aka.ms/new-console-template for more information
-
-using System.Reflection;
+﻿using System.Reflection;
 using System.Runtime.InteropServices;
 using Discord;
 using Shizou.MpvDiscordPresence;
 
 NativeLibrary.SetDllImportResolver(Assembly.GetExecutingAssembly(), DllImportResolver);
 
-var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
+using var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
 
-using var client = new MpvPipeClient("tmp/mpvsocket");
+using var client = new MpvPipeClient("shizou-socket");
 
 for (;; Thread.Sleep(TimeSpan.FromSeconds(5)))
 {

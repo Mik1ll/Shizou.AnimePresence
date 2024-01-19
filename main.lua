@@ -17,7 +17,7 @@ if not file_exists(exePath) then
     return
 end
 
-mp.set_property("input-ipc-server", "tmp/mpvsocket")
+mp.set_property("input-ipc-server", "shizou-socket")
 
 local cmd = nil
 

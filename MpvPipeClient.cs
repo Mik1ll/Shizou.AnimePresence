@@ -57,16 +57,17 @@ public class MpvPipeClient : IDisposable
     {
         lock (_exchangeLock)
         {
+            Connect();
             SendRequest();
             return ReceiveResponse();
         }
 
         void SendRequest()
         {
-            Connect();
             var requestJson = JsonSerializer.Serialize(request) + '\n';
             var requestBytes = Encoding.UTF8.GetBytes(requestJson);
             _pipeClientStream.Write(requestBytes);
+            _pipeClientStream.Flush();
         }
 
         JsonElement ReceiveResponse()
