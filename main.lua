@@ -23,6 +23,7 @@ end
 mp.set_property("input-ipc-server", "shizou-socket")
 
 local function start()
+    mp.msg.info("Starting subprocess")
 	mp.command_native({
 		name = "subprocess",
 		playback_only = false,

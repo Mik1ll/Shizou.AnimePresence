@@ -3,6 +3,7 @@ using System.IO.Pipes;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Threading.Channels;
+using Discord;
 
 namespace Shizou.MpvDiscordPresence;
 
@@ -25,9 +26,11 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
     private readonly int _timeout = 500;
     private readonly Random _random = new();
     private readonly ConcurrentDictionary<int, Channel<Response>> _responses = new();
+    private readonly CancellationTokenSource _cancelSource;
 
-    public MpvPipeClient(string serverPath)
+    public MpvPipeClient(string serverPath, CancellationTokenSource cancelSource)
     {
+        _cancelSource = cancelSource;
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Anonymous);
         _pipeClientStream.Connect(_timeout);
         _lineReader = new StreamReader(_pipeClientStream);
@@ -41,14 +44,14 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
         return new Request(command, _nextRequestId);
     }
 
-    public async Task<JsonElement> GetPropertyAsync(string key)
+    private async Task<JsonElement> GetPropertyAsync(string key)
     {
         var request = NewRequest("get_property", key);
         var response = await ExecuteQueryAsync(request);
         return response;
     }
 
-    public async Task<string> GetPropertyStringAsync(string key)
+    private async Task<string> GetPropertyStringAsync(string key)
     {
         var request = NewRequest("get_property_string", key);
         var response = await ExecuteQueryAsync(request);
@@ -57,22 +60,78 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
 
     public async Task ReadLoop()
     {
-        while (true)
+        while (!_cancelSource.Token.IsCancellationRequested)
         {
-            var line = await _lineReader.ReadLineAsync() ?? throw new JsonException("Json response empty");
-            var response = JsonSerializer.Deserialize<Response>(line) ?? throw new JsonException("Json response empty");
+            var line = await _lineReader.ReadLineAsync(_cancelSource.Token);
+
+            if (_cancelSource.Token.IsCancellationRequested)
+                break;
+            if (string.IsNullOrEmpty(line))
+                continue;
+            var response = JsonSerializer.Deserialize<Response>(line)!;
             if (response.@event is not null && response.@event == "shutdown")
-                throw new OperationCanceledException();
+            {
+                _cancelSource.Cancel();
+                break;
+            }
 
             if (response is { @event: null, request_id: not null })
             {
                 _responses.TryGetValue(response.request_id.Value, out var channel);
                 if (channel is not null)
                 {
-                    await channel.Writer.WriteAsync(response);
+                    await channel.Writer.WriteAsync(response, _cancelSource.Token);
+                    if (_cancelSource.Token.IsCancellationRequested)
+                        break;
                     channel.Writer.Complete();
                 }
             }
+        }
+    }
+
+    public async Task QueryLoop()
+    {
+        using var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
+        for (; !_cancelSource.Token.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(5), _cancelSource.Token))
+        {
+            var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
+            var position = (await GetPropertyAsync("time-pos")).GetDouble();
+            var duration = (await GetPropertyAsync("duration")).GetDouble();
+            var paused = (await GetPropertyAsync("pause")).GetBoolean();
+            var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
+            var splitIdx = playlistTitle.LastIndexOf('-');
+            var title = playlistTitle[..splitIdx].Trim();
+            var epNo = playlistTitle[splitIdx..].Trim();
+
+            var activity = new Activity
+            {
+                Details = title,
+                State = epNo[0] switch
+                {
+                    'S' => "Special " + epNo[1..],
+                    'C' => "Credit " + epNo[1..],
+                    'T' => "Trailer " + epNo[1..],
+                    'P' => "Parody " + epNo[1..],
+                    'O' => "Other " + epNo[1..],
+                    _ => "Episode " + epNo
+                },
+                Timestamps = new ActivityTimestamps
+                {
+                    Start = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(position)).ToUnixTimeSeconds(),
+                    End = (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(duration)).ToUnixTimeSeconds()
+                },
+                Assets = new ActivityAssets
+                {
+                    LargeImage = "mpv",
+                    LargeText = "mpv",
+                    SmallImage = paused ? "pause" : "play",
+                    SmallText = paused ? "Paused" : "Playing"
+                }
+            };
+
+
+            discord.GetActivityManager().UpdateActivity(activity, _ => { });
+            discord.RunCallbacks();
         }
     }
 
@@ -84,7 +143,8 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
         async Task SendRequest()
         {
             var requestJson = JsonSerializer.Serialize(request);
-            await _lineWriter.WriteLineAsync(requestJson);
+            await _lineWriter.WriteLineAsync(requestJson.ToCharArray(), _cancelSource.Token);
+            _cancelSource.Token.ThrowIfCancellationRequested();
             await _lineWriter.FlushAsync();
         }
 
@@ -92,7 +152,8 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
         {
             _responses.TryGetValue(request.request_id, out var channel);
             if (channel is null) throw new InvalidOperationException("Channel returned null");
-            var response = await channel.Reader.ReadAsync();
+            var response = await channel.Reader.ReadAsync(_cancelSource.Token);
+            _cancelSource.Token.ThrowIfCancellationRequested();
             _responses.TryRemove(new KeyValuePair<int, Channel<Response>>(request.request_id, channel));
             if (response.error != "success")
                 throw new InvalidOperationException(
@@ -103,21 +164,11 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
 
     public void Dispose()
     {
-        Console.WriteLine("Cleanup");
         _pipeClientStream.Dispose();
-        _lineReader.Dispose();
-        _lineWriter.Dispose();
     }
 
     public async ValueTask DisposeAsync()
     {
-        Console.WriteLine("Cleanup Async");
         await _pipeClientStream.DisposeAsync();
-        await _lineWriter.DisposeAsync();
-        // ReSharper disable once SuspiciousTypeConversion.Global
-        if (_lineReader is IAsyncDisposable lineReaderAsyncDisposable)
-            await lineReaderAsyncDisposable.DisposeAsync();
-        else
-            _lineReader.Dispose();
     }
 }
