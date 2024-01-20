@@ -7,15 +7,17 @@ NativeLibrary.SetDllImportResolver(Assembly.GetExecutingAssembly(), DllImportRes
 
 using var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
 
-using var client = new MpvPipeClient("shizou-socket");
+await using var client = new MpvPipeClient("shizou-socket");
 
-for (;; Thread.Sleep(TimeSpan.FromSeconds(5)))
+_ = Task.Run(client.ReadLoop);
+
+for (;; await Task.Delay(TimeSpan.FromSeconds(5)))
 {
-    var playlistPos = client.GetProperty("playlist-pos").GetInt32();
-    var position = client.GetProperty("time-pos").GetDouble();
-    var duration = client.GetProperty("duration").GetDouble();
-    var paused = client.GetProperty("pause").GetBoolean();
-    var playlistTitle = client.GetPropertyString($"playlist/{playlistPos}/title");
+    var playlistPos = (await client.GetPropertyAsync("playlist-pos")).GetInt32();
+    var position = (await client.GetPropertyAsync("time-pos")).GetDouble();
+    var duration = (await client.GetPropertyAsync("duration")).GetDouble();
+    var paused = (await client.GetPropertyAsync("pause")).GetBoolean();
+    var playlistTitle = await client.GetPropertyStringAsync($"playlist/{playlistPos}/title");
     var splitIdx = playlistTitle.LastIndexOf('-');
     var title = playlistTitle[..splitIdx].Trim();
     var epNo = playlistTitle[splitIdx..].Trim();
