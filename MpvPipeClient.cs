@@ -92,10 +92,10 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
     public async Task QueryLoop()
     {
         using var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
-        for (; !_cancelSource.Token.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(5), _cancelSource.Token))
+        var activity = new Activity();
+        for (; !_cancelSource.Token.IsCancellationRequested; await Task.Delay(TimeSpan.FromMilliseconds(200), _cancelSource.Token))
         {
             var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
-            var position = (await GetPropertyAsync("time-pos")).GetDouble();
             var duration = (await GetPropertyAsync("duration")).GetDouble();
             var paused = (await GetPropertyAsync("pause")).GetBoolean();
             var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
@@ -103,7 +103,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
             var title = playlistTitle[..splitIdx].Trim();
             var epNo = playlistTitle[splitIdx..].Trim();
 
-            var activity = new Activity
+            var newActivity = new Activity
             {
                 Details = title,
                 State = epNo[0] switch
@@ -117,8 +117,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 },
                 Timestamps = new ActivityTimestamps
                 {
-                    Start = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(position)).ToUnixTimeSeconds(),
-                    End = (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(duration)).ToUnixTimeSeconds()
+                    End = paused ? default : (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(duration)).ToUnixTimeSeconds()
                 },
                 Assets = new ActivityAssets
                 {
@@ -129,10 +128,13 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 }
             };
 
-
-            discord.GetActivityManager().UpdateActivity(activity, _ => { });
+            if (!ActivityEqual(newActivity, activity))
+                discord.GetActivityManager().UpdateActivity(newActivity, _ => { });
+            activity = newActivity;
             discord.RunCallbacks();
         }
+
+        bool ActivityEqual(Activity a, Activity b) => a.Assets.SmallText == b.Assets.SmallText;
     }
 
     private async Task<JsonElement> ExecuteQueryAsync(Request request)
