@@ -117,7 +117,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 pollRate = TimeSpan.FromMilliseconds(200);
 
                 var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
-                var duration = (await GetPropertyAsync("duration")).GetDouble();
+                var timeLeft = (await GetPropertyAsync("playtime-remaining")).GetDouble();
                 var paused = (await GetPropertyAsync("pause")).GetBoolean();
                 var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
                 var splitIdx = playlistTitle.LastIndexOf('-');
@@ -138,7 +138,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                     },
                     Timestamps = new ActivityTimestamps
                     {
-                        End = paused ? default : (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(duration)).ToUnixTimeSeconds()
+                        End = paused ? default : (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(timeLeft)).ToUnixTimeSeconds()
                     },
                     Assets = new ActivityAssets
                     {
@@ -178,7 +178,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
             discord?.Dispose();
         }
 
-        bool ActivityEqual(Activity a, Activity b) => a.Assets.SmallText == b.Assets.SmallText;
+        bool ActivityEqual(Activity a, Activity b) => a.Assets.SmallText == b.Assets.SmallText && Math.Abs(a.Timestamps.End - b.Timestamps.End) <= 2;
     }
 
     private async Task<JsonElement> ExecuteQueryAsync(Request request)
