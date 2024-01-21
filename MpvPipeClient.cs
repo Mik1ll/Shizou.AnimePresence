@@ -91,47 +91,91 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
 
     public async Task QueryLoop()
     {
-        using var discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
+        Discord.Discord? discord = null;
         var activity = new Activity();
-        for (; !_cancelSource.Token.IsCancellationRequested; await Task.Delay(TimeSpan.FromMilliseconds(200), _cancelSource.Token))
+        var slowPoll = TimeSpan.FromSeconds(10);
+        try
         {
-            var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
-            var duration = (await GetPropertyAsync("duration")).GetDouble();
-            var paused = (await GetPropertyAsync("pause")).GetBoolean();
-            var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
-            var splitIdx = playlistTitle.LastIndexOf('-');
-            var title = playlistTitle[..splitIdx].Trim();
-            var epNo = playlistTitle[splitIdx..].Trim();
-
-            var newActivity = new Activity
+            TimeSpan pollRate;
+            for (; !_cancelSource.Token.IsCancellationRequested; await Task.Delay(pollRate, _cancelSource.Token))
             {
-                Details = title,
-                State = epNo[0] switch
+                try
                 {
-                    'S' => "Special " + epNo[1..],
-                    'C' => "Credit " + epNo[1..],
-                    'T' => "Trailer " + epNo[1..],
-                    'P' => "Parody " + epNo[1..],
-                    'O' => "Other " + epNo[1..],
-                    _ => "Episode " + epNo
-                },
-                Timestamps = new ActivityTimestamps
-                {
-                    End = paused ? default : (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(duration)).ToUnixTimeSeconds()
-                },
-                Assets = new ActivityAssets
-                {
-                    LargeImage = "mpv",
-                    LargeText = "mpv",
-                    SmallImage = paused ? "pause" : "play",
-                    SmallText = paused ? "Paused" : "Playing"
+                    if (discord is null)
+                    {
+                        discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
+                        Console.WriteLine("Discord client started");
+                    }
                 }
-            };
+                catch (ResultException)
+                {
+                    pollRate = slowPoll;
+                    Console.WriteLine($"Discord client couldn't start, trying again in {pollRate.TotalSeconds}s");
+                    continue;
+                }
 
-            if (!ActivityEqual(newActivity, activity))
-                discord.GetActivityManager().UpdateActivity(newActivity, _ => { });
-            activity = newActivity;
-            discord.RunCallbacks();
+                pollRate = TimeSpan.FromMilliseconds(200);
+
+                var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
+                var duration = (await GetPropertyAsync("duration")).GetDouble();
+                var paused = (await GetPropertyAsync("pause")).GetBoolean();
+                var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
+                var splitIdx = playlistTitle.LastIndexOf('-');
+                var title = playlistTitle[..splitIdx].Trim();
+                var epNo = playlistTitle[splitIdx..].Trim();
+
+                var newActivity = new Activity
+                {
+                    Details = title,
+                    State = epNo[0] switch
+                    {
+                        'S' => "Special " + epNo[1..],
+                        'C' => "Credit " + epNo[1..],
+                        'T' => "Trailer " + epNo[1..],
+                        'P' => "Parody " + epNo[1..],
+                        'O' => "Other " + epNo[1..],
+                        _ => "Episode " + epNo
+                    },
+                    Timestamps = new ActivityTimestamps
+                    {
+                        End = paused ? default : (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(duration)).ToUnixTimeSeconds()
+                    },
+                    Assets = new ActivityAssets
+                    {
+                        LargeImage = "mpv",
+                        LargeText = "mpv",
+                        SmallImage = paused ? "pause" : "play",
+                        SmallText = paused ? "Paused" : "Playing"
+                    }
+                };
+
+                try
+                {
+                    if (!ActivityEqual(newActivity, activity))
+                        discord.GetActivityManager().UpdateActivity(newActivity, _ => { });
+                    activity = newActivity;
+                    discord.RunCallbacks();
+                }
+                catch (ResultException)
+                {
+                    pollRate = slowPoll;
+                    try
+                    {
+                        discord.Dispose();
+                    }
+                    catch (Exception)
+                    {
+                        // ignored
+                    }
+
+                    discord = null;
+                    Console.WriteLine($"Something went wrong while trying to update Discord, trying again in {pollRate.TotalSeconds}s");
+                }
+            }
+        }
+        finally
+        {
+            discord?.Dispose();
         }
 
         bool ActivityEqual(Activity a, Activity b) => a.Assets.SmallText == b.Assets.SmallText;
