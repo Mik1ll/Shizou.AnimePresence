@@ -122,7 +122,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
                 var splitIdx = playlistTitle.LastIndexOf('-');
                 var title = playlistTitle[..splitIdx].Trim();
-                var epNo = playlistTitle[splitIdx..].Trim();
+                var epNo = playlistTitle[(splitIdx + 1)..].Trim();
 
                 var newActivity = new Activity
                 {
