@@ -3,6 +3,7 @@ using System.IO.Pipes;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Threading.Channels;
+using System.Web;
 using Discord;
 
 namespace Shizou.MpvDiscordPresence;
@@ -122,11 +123,13 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 var timeLeft = (await GetPropertyAsync("playtime-remaining")).GetDouble();
                 var paused = (await GetPropertyAsync("pause")).GetBoolean();
                 var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
-                var splitStart = playlistTitle.IndexOf('-');
                 var splitEnd = playlistTitle.LastIndexOf('-');
-                var imageName = playlistTitle[..splitStart].Trim();
                 var epNo = playlistTitle[(splitEnd + 1)..].Trim();
-                var title = playlistTitle[(splitStart + 1)..splitEnd].Trim();
+                var title = playlistTitle[..splitEnd].Trim();
+                var path = await GetPropertyStringAsync("path");
+
+                var uri = new Uri(path);
+                var posterFilename = HttpUtility.ParseQueryString(uri.Query).Get("posterFilename");
 
                 var newActivity = new Activity
                 {
@@ -146,7 +149,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                     },
                     Assets = new ActivityAssets
                     {
-                        LargeImage = $"https://cdn.anidb.net/images/main/{imageName}",
+                        LargeImage = $"https://cdn.anidb.net/images/main/{posterFilename}",
                         LargeText = "mpv",
                         SmallImage = paused ? "pause" : "play",
                         SmallText = paused ? "Paused" : "Playing"
