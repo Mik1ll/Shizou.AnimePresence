@@ -1,5 +1,7 @@
 ﻿local mp = require("mp")
 
+local discord_client_id_str = "737663962677510245"
+
 local function file_exists(name)
 	local f = io.open(name, "r")
 	if f ~= nil then
@@ -27,7 +29,7 @@ local function start()
 	mp.command_native({
 		name = "subprocess",
 		playback_only = false,
-		args = { exePath },
+		args = { exePath, discord_client_id_str },
 	})
 end
 

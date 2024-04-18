@@ -3,10 +3,15 @@ using System.Runtime.InteropServices;
 using Discord;
 using Shizou.MpvDiscordPresence;
 
+if (args.Length != 1)
+    throw new InvalidOperationException("Must provide single argument: discord client id");
+
+var discordClientId = long.Parse(args[0]);
+
 NativeLibrary.SetDllImportResolver(Assembly.GetExecutingAssembly(), DllImportResolver);
 
 var cancelSource = new CancellationTokenSource();
-await using var client = new MpvPipeClient("shizou-socket", cancelSource);
+await using var client = new MpvPipeClient("shizou-socket", discordClientId, cancelSource);
 
 try
 {

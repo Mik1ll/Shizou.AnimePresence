@@ -26,10 +26,12 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
     private readonly int _timeout = 500;
     private readonly Random _random = new();
     private readonly ConcurrentDictionary<int, Channel<Response>> _responses = new();
+    private readonly long _discordClientId;
     private readonly CancellationTokenSource _cancelSource;
 
-    public MpvPipeClient(string serverPath, CancellationTokenSource cancelSource)
+    public MpvPipeClient(string serverPath, long discordClientId, CancellationTokenSource cancelSource)
     {
+        _discordClientId = discordClientId;
         _cancelSource = cancelSource;
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Anonymous);
         _pipeClientStream.Connect(_timeout);
@@ -103,7 +105,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 {
                     if (discord is null)
                     {
-                        discord = new Discord.Discord(737663962677510245, (ulong)CreateFlags.NoRequireDiscord);
+                        discord = new Discord.Discord(_discordClientId, (ulong)CreateFlags.NoRequireDiscord);
                         Console.WriteLine("Discord client started");
                     }
                 }
