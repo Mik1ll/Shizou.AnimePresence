@@ -122,9 +122,11 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 var timeLeft = (await GetPropertyAsync("playtime-remaining")).GetDouble();
                 var paused = (await GetPropertyAsync("pause")).GetBoolean();
                 var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
-                var splitIdx = playlistTitle.LastIndexOf('-');
-                var title = playlistTitle[..splitIdx].Trim();
-                var epNo = playlistTitle[(splitIdx + 1)..].Trim();
+                var splitStart = playlistTitle.IndexOf('-');
+                var splitEnd = playlistTitle.LastIndexOf('-');
+                var imageName = playlistTitle[..splitStart].Trim();
+                var epNo = playlistTitle[(splitEnd + 1)..].Trim();
+                var title = playlistTitle[(splitStart + 1)..splitEnd].Trim();
 
                 var newActivity = new Activity
                 {
@@ -144,7 +146,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                     },
                     Assets = new ActivityAssets
                     {
-                        LargeImage = "mpv",
+                        LargeImage = $"https://cdn.anidb.net/images/main/{imageName}",
                         LargeText = "mpv",
                         SmallImage = paused ? "pause" : "play",
                         SmallText = paused ? "Paused" : "Playing"
