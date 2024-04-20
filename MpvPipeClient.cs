@@ -10,25 +10,15 @@ namespace Shizou.MpvDiscordPresence;
 
 public class MpvPipeClient : IDisposable, IAsyncDisposable
 {
-    private int _nextRequestId;
-
-    // ReSharper disable InconsistentNaming
-    // ReSharper disable once NotAccessedPositionalProperty.Local
-    private record Request(string[] command, int request_id);
-
-    // ReSharper disable once ClassNeverInstantiated.Local
-    // ReSharper disable once NotAccessedPositionalProperty.Local
-    private record Response(string? error, JsonElement? data, int? request_id, string? @event);
-    // ReSharper restore InconsistantNaming
-
     private readonly NamedPipeClientStream _pipeClientStream;
     private readonly StreamReader _lineReader;
     private readonly StreamWriter _lineWriter;
     private readonly int _timeout = 500;
     private readonly Random _random = new();
-    private readonly ConcurrentDictionary<int, Channel<Response>> _responses = new();
+    private readonly ConcurrentDictionary<int, Channel<PipeResponse>> _responses = new();
     private readonly long _discordClientId;
     private readonly CancellationTokenSource _cancelSource;
+    private int _nextRequestId;
 
     public MpvPipeClient(string serverPath, long discordClientId, CancellationTokenSource cancelSource)
     {
@@ -38,27 +28,6 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
         _pipeClientStream.Connect(_timeout);
         _lineReader = new StreamReader(_pipeClientStream);
         _lineWriter = new StreamWriter(_pipeClientStream);
-    }
-
-    private Request NewRequest(params string[] command)
-    {
-        _nextRequestId = _random.Next();
-        _responses[_nextRequestId] = Channel.CreateBounded<Response>(1);
-        return new Request(command, _nextRequestId);
-    }
-
-    private async Task<JsonElement> GetPropertyAsync(string key)
-    {
-        var request = NewRequest("get_property", key);
-        var response = await ExecuteQueryAsync(request);
-        return response;
-    }
-
-    private async Task<string> GetPropertyStringAsync(string key)
-    {
-        var request = NewRequest("get_property_string", key);
-        var response = await ExecuteQueryAsync(request);
-        return response.GetString() ?? "";
     }
 
     public async Task ReadLoop()
@@ -71,10 +40,10 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 break;
             if (string.IsNullOrEmpty(line))
                 continue;
-            var response = JsonSerializer.Deserialize<Response>(line)!;
+            var response = JsonSerializer.Deserialize(line, ResponseContext.Default.PipeResponse)!;
             if (response.@event is not null && response.@event == "shutdown")
             {
-                _cancelSource.Cancel();
+                await _cancelSource.CancelAsync();
                 break;
             }
 
@@ -188,14 +157,45 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
         bool ActivityEqual(Activity a, Activity b) => a.Assets.SmallText == b.Assets.SmallText && Math.Abs(a.Timestamps.End - b.Timestamps.End) <= 2;
     }
 
-    private async Task<JsonElement> ExecuteQueryAsync(Request request)
+    public async ValueTask DisposeAsync()
+    {
+        await _pipeClientStream.DisposeAsync();
+    }
+
+    public void Dispose()
+    {
+        _pipeClientStream.Dispose();
+    }
+
+    private PipeRequest NewRequest(params string[] command)
+    {
+        _nextRequestId = _random.Next();
+        _responses[_nextRequestId] = Channel.CreateBounded<PipeResponse>(1);
+        return new PipeRequest(command, _nextRequestId);
+    }
+
+    private async Task<JsonElement> GetPropertyAsync(string key)
+    {
+        var request = NewRequest("get_property", key);
+        var response = await ExecuteQueryAsync(request);
+        return response;
+    }
+
+    private async Task<string> GetPropertyStringAsync(string key)
+    {
+        var request = NewRequest("get_property_string", key);
+        var response = await ExecuteQueryAsync(request);
+        return response.GetString() ?? "";
+    }
+
+    private async Task<JsonElement> ExecuteQueryAsync(PipeRequest request)
     {
         await SendRequest();
         return await ReceiveResponse();
 
         async Task SendRequest()
         {
-            var requestJson = JsonSerializer.Serialize(request);
+            var requestJson = JsonSerializer.Serialize(request, RequestContext.Default.PipeRequest);
             await _lineWriter.WriteLineAsync(requestJson.ToCharArray(), _cancelSource.Token);
             _cancelSource.Token.ThrowIfCancellationRequested();
             await _lineWriter.FlushAsync();
@@ -207,21 +207,11 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
             if (channel is null) throw new InvalidOperationException("Channel returned null");
             var response = await channel.Reader.ReadAsync(_cancelSource.Token);
             _cancelSource.Token.ThrowIfCancellationRequested();
-            _responses.TryRemove(new KeyValuePair<int, Channel<Response>>(request.request_id, channel));
+            _responses.TryRemove(new KeyValuePair<int, Channel<PipeResponse>>(request.request_id, channel));
             if (response.error != "success")
                 throw new InvalidOperationException(
                     $"Response for request: ({string.Join(',', request.command)}) returned an error {response.error} ({response.data})");
             return response.data!.Value;
         }
-    }
-
-    public void Dispose()
-    {
-        _pipeClientStream.Dispose();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        await _pipeClientStream.DisposeAsync();
     }
 }
