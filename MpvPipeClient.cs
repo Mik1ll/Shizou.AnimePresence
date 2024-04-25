@@ -63,6 +63,18 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
 
     public async Task QueryLoop()
     {
+        var path = await GetPropertyStringAsync("path");
+        var uri = new Uri(path);
+        var playlistQuery = HttpUtility.ParseQueryString(uri.Query);
+        var appId = playlistQuery.Get("appId");
+        if (!string.Equals(appId, "shizou", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine("App id in query string did not match/exist, exiting");
+            return;
+        }
+
+        var posterFilename = playlistQuery.Get("posterFilename");
+
         Discord.Discord? discord = null;
         var activity = new Activity();
         var slowPoll = TimeSpan.FromSeconds(10);
@@ -95,10 +107,6 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 var splitEnd = playlistTitle.LastIndexOf('-');
                 var epNo = playlistTitle[(splitEnd + 1)..].Trim();
                 var title = playlistTitle[..splitEnd].Trim();
-                var path = await GetPropertyStringAsync("path");
-
-                var uri = new Uri(path);
-                var posterFilename = HttpUtility.ParseQueryString(uri.Query).Get("posterFilename");
 
                 var newActivity = new Activity
                 {
