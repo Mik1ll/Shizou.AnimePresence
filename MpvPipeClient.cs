@@ -126,7 +126,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                     },
                     Assets = new ActivityAssets
                     {
-                        LargeImage = $"https://cdn.anidb.net/images/main/{posterFilename}",
+                        LargeImage = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
                         LargeText = "mpv",
                         SmallImage = paused ? "pause" : "play",
                         SmallText = paused ? "Paused" : "Playing"
