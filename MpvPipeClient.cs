@@ -30,6 +30,13 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
         _lineWriter = new StreamWriter(_pipeClientStream);
     }
 
+    private static string SmartStringTrim(string str, int length)
+    {
+        if (str.Length <= length)
+            return str;
+        return str[..str[..(length + 1)].LastIndexOf(' ')];
+    }
+
     public async Task ReadLoop()
     {
         while (!_cancelSource.Token.IsCancellationRequested)
@@ -63,18 +70,6 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
 
     public async Task QueryLoop()
     {
-        var path = await GetPropertyStringAsync("path");
-        var uri = new Uri(path);
-        var playlistQuery = HttpUtility.ParseQueryString(uri.Query);
-        var appId = playlistQuery.Get("appId");
-        if (!string.Equals(appId, "shizou", StringComparison.OrdinalIgnoreCase))
-        {
-            Console.WriteLine("App id in query string did not match/exist, exiting");
-            return;
-        }
-
-        var posterFilename = playlistQuery.Get("posterFilename");
-
         Discord.Discord? discord = null;
         var activity = new Activity();
         var slowPoll = TimeSpan.FromSeconds(10);
@@ -100,17 +95,30 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
 
                 pollRate = TimeSpan.FromMilliseconds(200);
 
+                var path = await GetPropertyStringAsync("path");
+                var uri = new Uri(path);
+                var fileQuery = HttpUtility.ParseQueryString(uri.Query);
+                var appId = fileQuery.Get("appId");
+                if (!string.Equals(appId, "shizou", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine("App id in query string did not match/exist, exiting");
+                    return;
+                }
+
+                var posterFilename = fileQuery.Get("posterFilename");
+                var episodeName = fileQuery.Get("episodeName");
+
                 var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
                 var timeLeft = (await GetPropertyAsync("playtime-remaining")).GetDouble();
                 var paused = (await GetPropertyAsync("pause")).GetBoolean();
                 var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
                 var splitEnd = playlistTitle.LastIndexOf('-');
                 var epNo = playlistTitle[(splitEnd + 1)..].Trim();
-                var title = playlistTitle[..splitEnd].Trim();
+                var animeName = playlistTitle[..splitEnd].Trim();
 
                 var newActivity = new Activity
                 {
-                    Details = title,
+                    Details = animeName,
                     State = epNo[0] switch
                     {
                         'S' => "Special " + epNo[1..],
@@ -127,7 +135,7 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                     Assets = new ActivityAssets
                     {
                         LargeImage = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
-                        LargeText = "mpv",
+                        LargeText = episodeName is null ? "mpv" : SmartStringTrim(episodeName, 64),
                         SmallImage = paused ? "pause" : "play",
                         SmallText = paused ? "Paused" : "Playing"
                     }
@@ -162,7 +170,11 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
             discord?.Dispose();
         }
 
-        bool ActivityEqual(Activity a, Activity b) => a.Assets.SmallText == b.Assets.SmallText && Math.Abs(a.Timestamps.End - b.Timestamps.End) <= 2;
+        bool ActivityEqual(Activity a, Activity b) =>
+            a.Assets.LargeText == b.Assets.LargeText &&
+            Math.Abs(a.Timestamps.End - b.Timestamps.End) <= 2 &&
+            a.Details == b.Details &&
+            a.Assets.SmallText == b.Assets.SmallText;
     }
 
     public async ValueTask DisposeAsync()
