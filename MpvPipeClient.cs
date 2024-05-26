@@ -4,11 +4,11 @@ using System.Security.Principal;
 using System.Text.Json;
 using System.Threading.Channels;
 using System.Web;
-using Discord;
+using DiscordRPC;
 
 namespace Shizou.MpvDiscordPresence;
 
-public class MpvPipeClient : IDisposable, IAsyncDisposable
+public class MpvPipeClient : IDisposable
 {
     private readonly NamedPipeClientStream _pipeClientStream;
     private readonly StreamReader _lineReader;
@@ -16,14 +16,17 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
     private readonly int _timeout = 500;
     private readonly Random _random = new();
     private readonly ConcurrentDictionary<int, Channel<PipeResponse>> _responses = new();
-    private readonly long _discordClientId;
     private readonly CancellationTokenSource _cancelSource;
+    private readonly CancellationToken _cancelToken;
+    private readonly DiscordRpcClient _discordClient;
     private int _nextRequestId;
+    private bool _discordReady;
 
-    public MpvPipeClient(string serverPath, long discordClientId, CancellationTokenSource cancelSource)
+    public MpvPipeClient(string serverPath, string discordClientId, CancellationTokenSource cancelSource)
     {
-        _discordClientId = discordClientId;
         _cancelSource = cancelSource;
+        _cancelToken = cancelSource.Token;
+        _discordClient = new DiscordRpcClient(discordClientId);
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Anonymous);
         _pipeClientStream.Connect(_timeout);
         _lineReader = new StreamReader(_pipeClientStream);
@@ -39,11 +42,11 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
 
     public async Task ReadLoop()
     {
-        while (!_cancelSource.Token.IsCancellationRequested)
+        while (!_cancelToken.IsCancellationRequested)
         {
-            var line = await _lineReader.ReadLineAsync(_cancelSource.Token);
+            var line = await _lineReader.ReadLineAsync(_cancelToken);
 
-            if (_cancelSource.Token.IsCancellationRequested)
+            if (_cancelToken.IsCancellationRequested)
                 break;
             if (string.IsNullOrEmpty(line))
                 continue;
@@ -59,8 +62,8 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
                 _responses.TryGetValue(response.request_id.Value, out var channel);
                 if (channel is not null)
                 {
-                    await channel.Writer.WriteAsync(response, _cancelSource.Token);
-                    if (_cancelSource.Token.IsCancellationRequested)
+                    await channel.Writer.WriteAsync(response, _cancelToken);
+                    if (_cancelToken.IsCancellationRequested)
                         break;
                     channel.Writer.Complete();
                 }
@@ -70,121 +73,63 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
 
     public async Task QueryLoop()
     {
-        Discord.Discord? discord = null;
-        var activity = new Activity();
-        var slowPoll = TimeSpan.FromSeconds(10);
-        try
+        _discordClient.OnReady += (_, _) => _discordReady = true;
+        _discordClient.Initialize();
+        await Task.Yield();
+        for (; !_cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), _cancelToken))
         {
-            TimeSpan pollRate;
-            for (; !_cancelSource.Token.IsCancellationRequested; await Task.Delay(pollRate, _cancelSource.Token))
+            if (!_discordReady)
+                continue;
+            var path = await GetPropertyStringAsync("path");
+            var uri = new Uri(path);
+            var fileQuery = HttpUtility.ParseQueryString(uri.Query);
+            var appId = fileQuery.Get("appId");
+            if (!string.Equals(appId, "shizou", StringComparison.OrdinalIgnoreCase))
             {
-                try
-                {
-                    if (discord is null)
-                    {
-                        discord = new Discord.Discord(_discordClientId, (ulong)CreateFlags.NoRequireDiscord);
-                        Console.WriteLine("Discord client started");
-                    }
-                }
-                catch (ResultException)
-                {
-                    pollRate = slowPoll;
-                    Console.WriteLine($"Discord client couldn't start, trying again in {pollRate.TotalSeconds}s");
-                    continue;
-                }
-
-                pollRate = TimeSpan.FromMilliseconds(200);
-
-                var path = await GetPropertyStringAsync("path");
-                var uri = new Uri(path);
-                var fileQuery = HttpUtility.ParseQueryString(uri.Query);
-                var appId = fileQuery.Get("appId");
-                if (!string.Equals(appId, "shizou", StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine("App id in query string did not match/exist, exiting");
-                    return;
-                }
-
-                var posterFilename = fileQuery.Get("posterFilename");
-                var episodeName = fileQuery.Get("episodeName");
-
-                var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
-                var timeLeft = (await GetPropertyAsync("playtime-remaining")).GetDouble();
-                var paused = (await GetPropertyAsync("pause")).GetBoolean();
-                var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
-                var splitEnd = playlistTitle.LastIndexOf('-');
-                var epNo = playlistTitle[(splitEnd + 1)..].Trim();
-                var animeName = playlistTitle[..splitEnd].Trim();
-
-                var newActivity = new Activity
-                {
-                    Details = animeName,
-                    State = epNo[0] switch
-                    {
-                        'S' => "Special " + epNo[1..],
-                        'C' => "Credit " + epNo[1..],
-                        'T' => "Trailer " + epNo[1..],
-                        'P' => "Parody " + epNo[1..],
-                        'O' => "Other " + epNo[1..],
-                        _ => "Episode " + epNo
-                    },
-                    Timestamps = new ActivityTimestamps
-                    {
-                        End = paused ? default : (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(timeLeft)).ToUnixTimeSeconds()
-                    },
-                    Assets = new ActivityAssets
-                    {
-                        LargeImage = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
-                        LargeText = string.IsNullOrWhiteSpace(episodeName) ? "mpv" : SmartStringTrim(episodeName, 64),
-                        SmallImage = paused ? "pause" : "play",
-                        SmallText = paused ? "Paused" : "Playing"
-                    }
-                };
-
-                try
-                {
-                    if (!ActivityEqual(newActivity, activity))
-                        discord.GetActivityManager().UpdateActivity(newActivity, _ => { });
-                    activity = newActivity;
-                    discord.RunCallbacks();
-                }
-                catch (ResultException)
-                {
-                    pollRate = slowPoll;
-                    try
-                    {
-                        discord.Dispose();
-                    }
-                    catch (Exception)
-                    {
-                        // ignored
-                    }
-
-                    discord = null;
-                    Console.WriteLine($"Something went wrong while trying to update Discord, trying again in {pollRate.TotalSeconds}s");
-                }
+                Console.WriteLine("App id in query string did not match/exist, exiting");
+                return;
             }
-        }
-        finally
-        {
-            discord?.Dispose();
-        }
 
-        bool ActivityEqual(Activity a, Activity b) =>
-            a.Assets.LargeText == b.Assets.LargeText &&
-            Math.Abs(a.Timestamps.End - b.Timestamps.End) <= 2 &&
-            a.Details == b.Details &&
-            a.Assets.SmallText == b.Assets.SmallText;
-    }
+            var posterFilename = fileQuery.Get("posterFilename");
+            var episodeName = fileQuery.Get("episodeName");
 
-    public async ValueTask DisposeAsync()
-    {
-        await _pipeClientStream.DisposeAsync();
+            var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
+            var timeLeft = (await GetPropertyAsync("playtime-remaining")).GetDouble();
+            var paused = (await GetPropertyAsync("pause")).GetBoolean();
+            var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
+            var splitEnd = playlistTitle.LastIndexOf('-');
+            var epNo = playlistTitle[(splitEnd + 1)..].Trim();
+            var animeName = playlistTitle[..splitEnd].Trim();
+
+            var newPresence = new RichPresence
+            {
+                Details = animeName,
+                State = epNo[0] switch
+                {
+                    'S' => "Special " + epNo[1..],
+                    'C' => "Credit " + epNo[1..],
+                    'T' => "Trailer " + epNo[1..],
+                    'P' => "Parody " + epNo[1..],
+                    'O' => "Other " + epNo[1..],
+                    _ => "Episode " + epNo
+                },
+                Timestamps = paused ? null : Timestamps.FromTimeSpan(timeLeft),
+                Assets = new Assets
+                {
+                    LargeImageKey = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
+                    LargeImageText = string.IsNullOrWhiteSpace(episodeName) ? "mpv" : SmartStringTrim(episodeName, 64),
+                    SmallImageKey = paused ? "pause" : "play",
+                    SmallImageText = paused ? "Paused" : "Playing"
+                }
+            };
+            _discordClient.SetPresence(newPresence);
+        }
     }
 
     public void Dispose()
     {
         _pipeClientStream.Dispose();
+        _discordClient.Dispose();
     }
 
     private PipeRequest NewRequest(params string[] command)
@@ -216,17 +161,18 @@ public class MpvPipeClient : IDisposable, IAsyncDisposable
         async Task SendRequest()
         {
             var requestJson = JsonSerializer.Serialize(request, RequestContext.Default.PipeRequest);
-            await _lineWriter.WriteLineAsync(requestJson.ToCharArray(), _cancelSource.Token);
-            _cancelSource.Token.ThrowIfCancellationRequested();
-            await _lineWriter.FlushAsync();
+            await _lineWriter.WriteLineAsync(requestJson.ToCharArray(), _cancelToken);
+            _cancelToken.ThrowIfCancellationRequested();
+            await _lineWriter.FlushAsync(_cancelToken);
+            _cancelToken.ThrowIfCancellationRequested();
         }
 
         async Task<JsonElement> ReceiveResponse()
         {
             _responses.TryGetValue(request.request_id, out var channel);
             if (channel is null) throw new InvalidOperationException("Channel returned null");
-            var response = await channel.Reader.ReadAsync(_cancelSource.Token);
-            _cancelSource.Token.ThrowIfCancellationRequested();
+            var response = await channel.Reader.ReadAsync(_cancelToken);
+            _cancelToken.ThrowIfCancellationRequested();
             _responses.TryRemove(new KeyValuePair<int, Channel<PipeResponse>>(request.request_id, channel));
             if (response.error != "success")
                 throw new InvalidOperationException(
