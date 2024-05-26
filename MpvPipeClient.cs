@@ -37,7 +37,7 @@ public class MpvPipeClient : IDisposable
     {
         if (str.Length <= length)
             return str;
-        return str[..str[..(length + 1)].LastIndexOf(' ')];
+        return str[..str[..(length + 1)].LastIndexOf(' ')] + "...";
     }
 
     public async Task ReadLoop()
@@ -92,18 +92,16 @@ public class MpvPipeClient : IDisposable
 
             var posterFilename = fileQuery.Get("posterFilename");
             var episodeName = fileQuery.Get("episodeName");
+            var animeId = fileQuery.Get("animeId") ?? throw new NullReferenceException("Anime ID cannot be null");
+            var animeName = fileQuery.Get("animeName") ?? throw new NullReferenceException("Anime name cannot be null");
+            var epNo = fileQuery.Get("epNo") ?? throw new NullReferenceException("Episode Number cannot be null");
 
-            var playlistPos = (await GetPropertyAsync("playlist-pos")).GetInt32();
             var timeLeft = (await GetPropertyAsync("playtime-remaining")).GetDouble();
             var paused = (await GetPropertyAsync("pause")).GetBoolean();
-            var playlistTitle = await GetPropertyStringAsync($"playlist/{playlistPos}/title");
-            var splitEnd = playlistTitle.LastIndexOf('-');
-            var epNo = playlistTitle[(splitEnd + 1)..].Trim();
-            var animeName = playlistTitle[..splitEnd].Trim();
 
             var newPresence = new RichPresence
             {
-                Details = animeName,
+                Details = SmartStringTrim(animeName, 64),
                 State = epNo[0] switch
                 {
                     'S' => "Special " + epNo[1..],
@@ -120,7 +118,8 @@ public class MpvPipeClient : IDisposable
                     LargeImageText = string.IsNullOrWhiteSpace(episodeName) ? "mpv" : SmartStringTrim(episodeName, 64),
                     SmallImageKey = paused ? "pause" : "play",
                     SmallImageText = paused ? "Paused" : "Playing"
-                }
+                },
+                Buttons = [new Button { Url = $"https://anidb.net/anime/{animeId}", Label = "View Anime" }]
             };
             _discordClient.SetPresence(newPresence);
         }
