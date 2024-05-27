@@ -101,7 +101,7 @@ public class MpvPipeClient : IDisposable
                     'O' => "Other " + epNo[1..],
                     _ => "Episode " + epNo
                 },
-                Timestamps = Timestamps.FromTimeSpan(timeLeft),
+                Timestamps = paused ? null : Timestamps.FromTimeSpan(timeLeft),
                 Assets = new Assets
                 {
                     LargeImageKey = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",

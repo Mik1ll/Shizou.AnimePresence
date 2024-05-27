@@ -1,12 +1,13 @@
 ﻿using Shizou.MpvDiscordPresence;
 
-if (args.Length != 1)
-    throw new InvalidOperationException("Must provide single argument: discord client id");
+if (args.Length != 2)
+    throw new InvalidOperationException("Must provide two arguments: discord client id and ipc socket/pipe name");
 
 var discordClientId = args[0];
+var socketName = args[1];
 
 var cancelSource = new CancellationTokenSource();
-using var client = new MpvPipeClient("shizou-socket", discordClientId);
+using var client = new MpvPipeClient(socketName, discordClientId);
 
 try
 {
