@@ -13,7 +13,7 @@ public class MpvPipeClient : IDisposable
     private readonly StreamReader _lineReader;
     private readonly StreamWriter _lineWriter;
     private readonly Random _random = new();
-    private readonly ConcurrentDictionary<int, Channel<PipeResponse>> _responses = new();
+    private readonly ConcurrentDictionary<int, Channel<MpvPipeResponse>> _responses = new();
     private readonly DiscordRpcClient _discordClient;
     private bool _discordReady;
 
@@ -43,7 +43,7 @@ public class MpvPipeClient : IDisposable
                 break;
             if (string.IsNullOrEmpty(line))
                 continue;
-            var response = JsonSerializer.Deserialize(line, ResponseContext.Default.PipeResponse)!;
+            var response = JsonSerializer.Deserialize(line, ResponseContext.Default.MpvPipeResponse)!;
             if (response.@event is not null && response.@event == "shutdown")
                 break;
 
@@ -121,11 +121,11 @@ public class MpvPipeClient : IDisposable
         _discordClient.Dispose();
     }
 
-    private PipeRequest NewRequest(params string[] command)
+    private MpvPipeRequest NewRequest(params string[] command)
     {
         var requestId = _random.Next();
-        _responses[requestId] = Channel.CreateBounded<PipeResponse>(1);
-        return new PipeRequest(command, requestId);
+        _responses[requestId] = Channel.CreateBounded<MpvPipeResponse>(1);
+        return new MpvPipeRequest(command, requestId);
     }
 
     private async Task<JsonElement> GetPropertyAsync(string key, CancellationToken cancelToken)
@@ -142,14 +142,14 @@ public class MpvPipeClient : IDisposable
         return response.GetString() ?? "";
     }
 
-    private async Task<JsonElement> ExecuteQueryAsync(PipeRequest request, CancellationToken cancelToken)
+    private async Task<JsonElement> ExecuteQueryAsync(MpvPipeRequest request, CancellationToken cancelToken)
     {
         await SendRequest();
         return await ReceiveResponse();
 
         async Task SendRequest()
         {
-            var requestJson = JsonSerializer.Serialize(request, RequestContext.Default.PipeRequest);
+            var requestJson = JsonSerializer.Serialize(request, RequestContext.Default.MpvPipeRequest);
             await _lineWriter.WriteLineAsync(requestJson.ToCharArray(), cancelToken);
             cancelToken.ThrowIfCancellationRequested();
         }
