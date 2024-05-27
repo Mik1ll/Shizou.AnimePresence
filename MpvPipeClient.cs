@@ -1,6 +1,5 @@
 ﻿using System.Collections.Concurrent;
 using System.IO.Pipes;
-using System.Security.Principal;
 using System.Text.Json;
 using System.Threading.Channels;
 using System.Web;
@@ -13,24 +12,18 @@ public class MpvPipeClient : IDisposable
     private readonly NamedPipeClientStream _pipeClientStream;
     private readonly StreamReader _lineReader;
     private readonly StreamWriter _lineWriter;
-    private readonly int _timeout = 500;
     private readonly Random _random = new();
     private readonly ConcurrentDictionary<int, Channel<PipeResponse>> _responses = new();
-    private readonly CancellationTokenSource _cancelSource;
-    private readonly CancellationToken _cancelToken;
     private readonly DiscordRpcClient _discordClient;
-    private int _nextRequestId;
     private bool _discordReady;
 
-    public MpvPipeClient(string serverPath, string discordClientId, CancellationTokenSource cancelSource)
+    public MpvPipeClient(string serverPath, string discordClientId)
     {
-        _cancelSource = cancelSource;
-        _cancelToken = cancelSource.Token;
         _discordClient = new DiscordRpcClient(discordClientId);
-        _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Anonymous);
-        _pipeClientStream.Connect(_timeout);
+        _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous);
+        _pipeClientStream.Connect(TimeSpan.FromMilliseconds(500));
         _lineReader = new StreamReader(_pipeClientStream);
-        _lineWriter = new StreamWriter(_pipeClientStream);
+        _lineWriter = new StreamWriter(_pipeClientStream) { AutoFlush = true };
     }
 
     private static string SmartStringTrim(string str, int length)
@@ -40,30 +33,27 @@ public class MpvPipeClient : IDisposable
         return str[..str[..(length + 1)].LastIndexOf(' ')] + "...";
     }
 
-    public async Task ReadLoop()
+    public async Task ReadLoop(CancellationToken cancelToken)
     {
-        while (!_cancelToken.IsCancellationRequested)
+        while (!cancelToken.IsCancellationRequested)
         {
-            var line = await _lineReader.ReadLineAsync(_cancelToken);
+            var line = await _lineReader.ReadLineAsync(cancelToken);
 
-            if (_cancelToken.IsCancellationRequested)
+            if (cancelToken.IsCancellationRequested)
                 break;
             if (string.IsNullOrEmpty(line))
                 continue;
             var response = JsonSerializer.Deserialize(line, ResponseContext.Default.PipeResponse)!;
             if (response.@event is not null && response.@event == "shutdown")
-            {
-                await _cancelSource.CancelAsync();
                 break;
-            }
 
             if (response is { @event: null, request_id: not null })
             {
                 _responses.TryGetValue(response.request_id.Value, out var channel);
                 if (channel is not null)
                 {
-                    await channel.Writer.WriteAsync(response, _cancelToken);
-                    if (_cancelToken.IsCancellationRequested)
+                    await channel.Writer.WriteAsync(response, cancelToken);
+                    if (cancelToken.IsCancellationRequested)
                         break;
                     channel.Writer.Complete();
                 }
@@ -71,16 +61,16 @@ public class MpvPipeClient : IDisposable
         }
     }
 
-    public async Task QueryLoop()
+    public async Task QueryLoop(CancellationToken cancelToken)
     {
         _discordClient.OnReady += (_, _) => _discordReady = true;
         _discordClient.Initialize();
         await Task.Yield();
-        for (; !_cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), _cancelToken))
+        for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
             if (!_discordReady)
                 continue;
-            var path = await GetPropertyStringAsync("path");
+            var path = await GetPropertyStringAsync("path", cancelToken);
             var uri = new Uri(path);
             var fileQuery = HttpUtility.ParseQueryString(uri.Query);
             var appId = fileQuery.Get("appId");
@@ -96,8 +86,8 @@ public class MpvPipeClient : IDisposable
             var animeName = fileQuery.Get("animeName") ?? throw new NullReferenceException("Anime name cannot be null");
             var epNo = fileQuery.Get("epNo") ?? throw new NullReferenceException("Episode Number cannot be null");
 
-            var timeLeft = (await GetPropertyAsync("playtime-remaining")).GetDouble();
-            var paused = (await GetPropertyAsync("pause")).GetBoolean();
+            var timeLeft = (await GetPropertyAsync("playtime-remaining", cancelToken)).GetDouble();
+            var paused = (await GetPropertyAsync("pause", cancelToken)).GetBoolean();
 
             var newPresence = new RichPresence
             {
@@ -111,7 +101,7 @@ public class MpvPipeClient : IDisposable
                     'O' => "Other " + epNo[1..],
                     _ => "Episode " + epNo
                 },
-                Timestamps = paused ? null : Timestamps.FromTimeSpan(timeLeft),
+                Timestamps = Timestamps.FromTimeSpan(timeLeft),
                 Assets = new Assets
                 {
                     LargeImageKey = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
@@ -133,26 +123,26 @@ public class MpvPipeClient : IDisposable
 
     private PipeRequest NewRequest(params string[] command)
     {
-        _nextRequestId = _random.Next();
-        _responses[_nextRequestId] = Channel.CreateBounded<PipeResponse>(1);
-        return new PipeRequest(command, _nextRequestId);
+        var requestId = _random.Next();
+        _responses[requestId] = Channel.CreateBounded<PipeResponse>(1);
+        return new PipeRequest(command, requestId);
     }
 
-    private async Task<JsonElement> GetPropertyAsync(string key)
+    private async Task<JsonElement> GetPropertyAsync(string key, CancellationToken cancelToken)
     {
         var request = NewRequest("get_property", key);
-        var response = await ExecuteQueryAsync(request);
+        var response = await ExecuteQueryAsync(request, cancelToken);
         return response;
     }
 
-    private async Task<string> GetPropertyStringAsync(string key)
+    private async Task<string> GetPropertyStringAsync(string key, CancellationToken cancelToken)
     {
         var request = NewRequest("get_property_string", key);
-        var response = await ExecuteQueryAsync(request);
+        var response = await ExecuteQueryAsync(request, cancelToken);
         return response.GetString() ?? "";
     }
 
-    private async Task<JsonElement> ExecuteQueryAsync(PipeRequest request)
+    private async Task<JsonElement> ExecuteQueryAsync(PipeRequest request, CancellationToken cancelToken)
     {
         await SendRequest();
         return await ReceiveResponse();
@@ -160,23 +150,21 @@ public class MpvPipeClient : IDisposable
         async Task SendRequest()
         {
             var requestJson = JsonSerializer.Serialize(request, RequestContext.Default.PipeRequest);
-            await _lineWriter.WriteLineAsync(requestJson.ToCharArray(), _cancelToken);
-            _cancelToken.ThrowIfCancellationRequested();
-            await _lineWriter.FlushAsync(_cancelToken);
-            _cancelToken.ThrowIfCancellationRequested();
+            await _lineWriter.WriteLineAsync(requestJson.ToCharArray(), cancelToken);
+            cancelToken.ThrowIfCancellationRequested();
         }
 
         async Task<JsonElement> ReceiveResponse()
         {
-            _responses.TryGetValue(request.request_id, out var channel);
-            if (channel is null) throw new InvalidOperationException("Channel returned null");
-            var response = await channel.Reader.ReadAsync(_cancelToken);
-            _cancelToken.ThrowIfCancellationRequested();
-            _responses.TryRemove(new KeyValuePair<int, Channel<PipeResponse>>(request.request_id, channel));
+            if (!_responses.TryGetValue(request.request_id, out var channel))
+                throw new InvalidOperationException("Response channel not found");
+            var response = await channel.Reader.ReadAsync(cancelToken);
+            cancelToken.ThrowIfCancellationRequested();
+            _responses.TryRemove(request.request_id, out _);
             if (response.error != "success")
                 throw new InvalidOperationException(
                     $"Response for request: ({string.Join(',', request.command)}) returned an error {response.error} ({response.data})");
-            return response.data!.Value;
+            return response.data;
         }
     }
 }

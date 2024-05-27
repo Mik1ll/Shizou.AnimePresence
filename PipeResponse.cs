@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Shizou.MpvDiscordPresence;
 
 // ReSharper disable InconsistentNaming
-public record PipeResponse(string? error, JsonElement? data, int? request_id, string? @event);
+public record PipeResponse(string? error, JsonElement data, int? request_id, string? @event);
 
 // ReSharper restore InconsistantNaming
 

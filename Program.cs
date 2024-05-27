@@ -6,11 +6,11 @@ if (args.Length != 1)
 var discordClientId = args[0];
 
 var cancelSource = new CancellationTokenSource();
-using var client = new MpvPipeClient("shizou-socket", discordClientId, cancelSource);
+using var client = new MpvPipeClient("shizou-socket", discordClientId);
 
 try
 {
-    var tasks = new[] { client.ReadLoop(), client.QueryLoop() };
+    var tasks = new[] { client.ReadLoop(cancelSource.Token), client.QueryLoop(cancelSource.Token) };
 
     Task.WaitAny(tasks);
     await cancelSource.CancelAsync();
