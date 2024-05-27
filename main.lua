@@ -23,7 +23,7 @@ local exePath = script_dir .. "/" .. "Shizou.MpvDiscordPresence";
 if not file_exists(exePath) then
     exePath = exePath .. ".exe"
     if not file_exists(exePath) then
-	    mp.msg.fatal(exeName .. " not found, stopping")
+	    mp.msg.fatal(exePath .. " not found, stopping")
 	    return
     end
 end
