@@ -21,7 +21,6 @@ public class MpvPipeClient : IDisposable
     {
         _discordClient = new DiscordRpcClient(discordClientId);
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous);
-        _pipeClientStream.Connect(TimeSpan.FromMilliseconds(500));
         _lineReader = new StreamReader(_pipeClientStream);
         _lineWriter = new StreamWriter(_pipeClientStream) { AutoFlush = true };
     }
@@ -33,14 +32,21 @@ public class MpvPipeClient : IDisposable
         return str[..str[..(length + 1)].LastIndexOf(' ')] + "...";
     }
 
+    public async Task Connect(CancellationToken cancelToken)
+    {
+        await _pipeClientStream.ConnectAsync(TimeSpan.FromMilliseconds(200), cancelToken);
+        cancelToken.ThrowIfCancellationRequested();
+
+        if (!_pipeClientStream.IsConnected)
+            throw new InvalidOperationException("Failed to connect to mpv ipc");
+    }
+
     public async Task ReadLoop(CancellationToken cancelToken)
     {
         while (!cancelToken.IsCancellationRequested)
         {
             var line = await _lineReader.ReadLineAsync(cancelToken);
-
-            if (cancelToken.IsCancellationRequested)
-                break;
+            cancelToken.ThrowIfCancellationRequested();
             if (string.IsNullOrEmpty(line))
                 continue;
             var response = JsonSerializer.Deserialize(line, ResponseContext.Default.MpvPipeResponse)!;
@@ -53,8 +59,7 @@ public class MpvPipeClient : IDisposable
                 if (channel is not null)
                 {
                     await channel.Writer.WriteAsync(response, cancelToken);
-                    if (cancelToken.IsCancellationRequested)
-                        break;
+                    cancelToken.ThrowIfCancellationRequested();
                     channel.Writer.Complete();
                 }
             }

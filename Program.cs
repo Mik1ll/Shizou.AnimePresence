@@ -11,6 +11,7 @@ using var client = new MpvPipeClient(socketName, discordClientId);
 
 try
 {
+    await client.Connect(cancelSource.Token);
     var tasks = new[] { client.ReadLoop(cancelSource.Token), client.QueryLoop(cancelSource.Token) };
 
     Task.WaitAny(tasks);

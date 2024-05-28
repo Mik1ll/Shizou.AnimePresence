@@ -4,7 +4,7 @@ using System.Threading.Channels;
 
 namespace Shizou.MpvDiscordPresence;
 
-public class DiscordPipeClient
+public class DiscordPipeClient : IDisposable
 {
     private readonly ConcurrentDictionary<int, Channel<DiscordPipeResponse>> _responses = new();
     private readonly string _discordClientId;
@@ -24,18 +24,27 @@ public class DiscordPipeClient
     {
     }
 
+    public void Dispose()
+    {
+        _pipeClientStream?.Dispose();
+    }
+
     private async Task Connect(CancellationToken cancelToken)
     {
         for (var i = 0; i < 10; ++i)
         {
-            var newPipe = new NamedPipeClientStream(".", GetPipeName(i), PipeDirection.InOut, PipeOptions.Asynchronous);
-            await newPipe.ConnectAsync(TimeSpan.FromMilliseconds(200), cancelToken);
-            if (newPipe.IsConnected)
-            {
-                _pipeClientStream = newPipe;
+            _pipeClientStream = new NamedPipeClientStream(".", GetPipeName(i), PipeDirection.InOut, PipeOptions.Asynchronous);
+            await _pipeClientStream.ConnectAsync(TimeSpan.FromMilliseconds(200), cancelToken);
+            cancelToken.ThrowIfCancellationRequested();
+            if (_pipeClientStream.IsConnected)
                 break;
-            }
         }
+
+        if (_pipeClientStream?.IsConnected is not true)
+            throw new InvalidOperationException("Failed to connect to discord ipc");
+
+        _lineReader = new StreamReader(_pipeClientStream);
+        _lineWriter = new StreamWriter(_pipeClientStream) { AutoFlush = true };
 
         static string GetTemporaryDirectory()
         {
