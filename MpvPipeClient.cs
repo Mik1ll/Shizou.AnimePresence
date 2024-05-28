@@ -10,19 +10,17 @@ namespace Shizou.MpvDiscordPresence;
 public class MpvPipeClient : IDisposable
 {
     private readonly NamedPipeClientStream _pipeClientStream;
-    private readonly StreamReader _lineReader;
-    private readonly StreamWriter _lineWriter;
     private readonly Random _random = new();
     private readonly ConcurrentDictionary<int, Channel<MpvPipeResponse>> _responses = new();
     private readonly DiscordRpcClient _discordClient;
+    private StreamReader? _lineReader;
+    private StreamWriter? _lineWriter;
     private bool _discordReady;
 
     public MpvPipeClient(string serverPath, string discordClientId)
     {
         _discordClient = new DiscordRpcClient(discordClientId);
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous);
-        _lineReader = new StreamReader(_pipeClientStream);
-        _lineWriter = new StreamWriter(_pipeClientStream) { AutoFlush = true };
     }
 
     private static string SmartStringTrim(string str, int length)
@@ -39,10 +37,15 @@ public class MpvPipeClient : IDisposable
 
         if (!_pipeClientStream.IsConnected)
             throw new InvalidOperationException("Failed to connect to mpv ipc");
+
+        _lineReader = new StreamReader(_pipeClientStream);
+        _lineWriter = new StreamWriter(_pipeClientStream) { AutoFlush = true };
     }
 
     public async Task ReadLoop(CancellationToken cancelToken)
     {
+        if (_lineReader is null)
+            throw new InvalidOperationException("Stream reader cannot be null");
         while (!cancelToken.IsCancellationRequested)
         {
             var line = await _lineReader.ReadLineAsync(cancelToken);
@@ -149,6 +152,8 @@ public class MpvPipeClient : IDisposable
 
     private async Task<JsonElement> ExecuteQueryAsync(MpvPipeRequest request, CancellationToken cancelToken)
     {
+        if (_lineWriter is null)
+            throw new InvalidOperationException("Stream writer cannot be null");
         await SendRequest();
         return await ReceiveResponse();
 
