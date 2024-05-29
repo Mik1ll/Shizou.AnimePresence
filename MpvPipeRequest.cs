@@ -6,6 +6,6 @@ namespace Shizou.MpvDiscordPresence;
 public record MpvPipeRequest(string[] command, int request_id);
 // ReSharper restore InconsistantNaming
 
-[JsonSourceGenerationOptions]
-[JsonSerializable(typeof(MpvPipeRequest), GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSerializable(typeof(MpvPipeRequest))]
 internal partial class RequestContext : JsonSerializerContext;

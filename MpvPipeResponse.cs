@@ -8,6 +8,6 @@ public record MpvPipeResponse(string? error, JsonElement data, int? request_id, 
 
 // ReSharper restore InconsistantNaming
 
-[JsonSourceGenerationOptions]
-[JsonSerializable(typeof(MpvPipeResponse), GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSerializable(typeof(MpvPipeResponse))]
 internal partial class ResponseContext : JsonSerializerContext;

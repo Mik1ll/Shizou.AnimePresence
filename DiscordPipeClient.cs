@@ -4,13 +4,13 @@ using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Shizou.MpvDiscordPresence;
 
 public class DiscordPipeClient : IDisposable
 {
     private static readonly int ProcessId = Process.GetCurrentProcess().Id;
-    private static readonly JsonSerializerOptions JsonOpts = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
     private readonly string _discordClientId;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private NamedPipeClientStream? _pipeClientStream;
@@ -34,13 +34,13 @@ public class DiscordPipeClient : IDisposable
             switch (opCode)
             {
                 case Opcode.Close:
-                    var close = JsonSerializer.Deserialize<Close>(payload)!;
+                    var close = JsonSerializer.Deserialize(payload, CloseContext.Default.Close)!;
                     throw new InvalidOperationException($"Discord closed the connection with error {close.code}: {close.message}");
                 case Opcode.Frame:
-                    var message = JsonSerializer.Deserialize<Message>(payload);
-                    if (message?.evt is Event.ERROR)
+                    var message = JsonSerializer.Deserialize(payload, MessageContext.Default.Message);
+                    if (message?.evt == Event.ERROR.ToString())
                         throw new InvalidOperationException($"Discord returned error: {message.data}");
-                    if (message?.evt is Event.READY)
+                    if (message?.evt == Event.READY.ToString())
                         _isReady = true;
                     break;
                 case Opcode.Ping:
@@ -100,7 +100,7 @@ public class DiscordPipeClient : IDisposable
         if (!_isReady)
             return;
         var cmd = new PresenceCommand(ProcessId, presence);
-        var frame = new Message(Command.SET_ACTIVITY, null, (++_nonce).ToString(), null, cmd);
+        var frame = new Message(Command.SET_ACTIVITY.ToString(), null, (++_nonce).ToString(), null, cmd);
         await WriteFrameAsync(frame, cancelToken);
     }
 
@@ -121,14 +121,28 @@ public class DiscordPipeClient : IDisposable
     {
         if (_pipeClientStream is null)
             throw new InvalidOperationException("Pipe client can't be null");
-        var opCodeBytes = BitConverter.GetBytes(Convert.ToUInt32(payload switch
+        Opcode opcode;
+        JsonTypeInfo jsonTypeInfo;
+        switch (payload)
         {
-            Message => Opcode.Frame,
-            Close => Opcode.Close,
-            HandShake => Opcode.Handshake,
-            _ => throw new ArgumentOutOfRangeException(nameof(payload), payload, null)
-        }));
-        var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOpts);
+            case Message:
+                opcode = Opcode.Frame;
+                jsonTypeInfo = MessageContext.Default.Message;
+                break;
+            case Close:
+                opcode = Opcode.Close;
+                jsonTypeInfo = CloseContext.Default.Close;
+                break;
+            case HandShake:
+                opcode = Opcode.Handshake;
+                jsonTypeInfo = HandShakeContext.Default.HandShake;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(payload), payload, null);
+        }
+
+        var opCodeBytes = BitConverter.GetBytes(Convert.ToUInt32(opcode));
+        var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload, jsonTypeInfo);
         var lengthBytes = BitConverter.GetBytes(Convert.ToUInt32(payloadBytes.Length));
         var buff = new byte[opCodeBytes.Length + lengthBytes.Length + payloadBytes.Length];
         opCodeBytes.CopyTo(buff, 0);
@@ -146,11 +160,24 @@ public class DiscordPipeClient : IDisposable
 [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global")]
 public record HandShake(string client_id, int v = 1);
 
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Serialization, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(HandShake))]
+internal partial class HandShakeContext : JsonSerializerContext;
+
 [SuppressMessage("ReSharper", "InconsistentNaming")]
-public record Message(Command cmd, Event? evt, string? nonce, object? data, object? args);
+public record Message(string cmd, string? evt, string? nonce, object? data, object? args);
+
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(Message))]
+[JsonSerializable(typeof(PresenceCommand))]
+internal partial class MessageContext : JsonSerializerContext;
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 public record Close(int code, string message);
+
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Serialization, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(Close))]
+internal partial class CloseContext : JsonSerializerContext;
 
 [JsonConverter(typeof(JsonStringEnumConverter<Command>))]
 [SuppressMessage("ReSharper", "InconsistentNaming")]
@@ -168,7 +195,7 @@ public enum Event
     ERROR
 }
 
-public enum Opcode : uint
+public enum Opcode
 {
     Handshake = 0,
     Frame = 1,
