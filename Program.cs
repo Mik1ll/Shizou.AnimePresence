@@ -12,12 +12,11 @@ try
     using var discordClient = new DiscordPipeClient(discordClientId);
     using var mpvClient = new MpvPipeClient(socketName, discordClient);
     await mpvClient.Connect(cancelSource.Token);
-    await discordClient.Connect(cancelSource.Token);
     var tasks = new[] { mpvClient.ReadLoop(cancelSource.Token), mpvClient.QueryLoop(cancelSource.Token), discordClient.ReadLoop(cancelSource.Token) };
 
-    Task.WaitAny(tasks);
+    await Task.WhenAny(tasks);
     await cancelSource.CancelAsync();
-    Task.WaitAll(tasks);
+    await Task.WhenAll(tasks);
 }
 catch (AggregateException ae)
 {

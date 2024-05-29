@@ -22,59 +22,96 @@ public class DiscordPipeClient : IDisposable
 
     public async Task ReadLoop(CancellationToken cancelToken)
     {
-        if (_pipeClientStream is null)
-            return;
         while (!cancelToken.IsCancellationRequested)
         {
-            var opCode = (Opcode)await ReadUInt32Async(_pipeClientStream, cancelToken);
-            var length = await ReadUInt32Async(_pipeClientStream, cancelToken);
-            var payload = new byte[length];
-            await _pipeClientStream.ReadExactlyAsync(payload, 0, Convert.ToInt32(length), cancelToken);
-            cancelToken.ThrowIfCancellationRequested();
-            switch (opCode)
+            try
             {
-                case Opcode.Close:
-                    var close = JsonSerializer.Deserialize(payload, CloseContext.Default.Close)!;
-                    throw new InvalidOperationException($"Discord closed the connection with error {close.code}: {close.message}");
-                case Opcode.Frame:
-                    var message = JsonSerializer.Deserialize(payload, MessageContext.Default.Message);
-                    if (message?.evt == Event.ERROR.ToString())
-                        throw new InvalidOperationException($"Discord returned error: {message.data}");
-                    if (message?.evt == Event.READY.ToString())
-                        _isReady = true;
-                    break;
-                case Opcode.Ping:
-                    var buff = new byte[length + 8];
-                    BitConverter.GetBytes(Convert.ToUInt32(Opcode.Pong)).CopyTo(buff, 0);
-                    BitConverter.GetBytes(length).CopyTo(buff, 4);
-                    payload.CopyTo(buff, 8);
-                    await _writeLock.WaitAsync(cancelToken);
-                    await _pipeClientStream.WriteAsync(buff, cancelToken);
-                    await _pipeClientStream.FlushAsync(cancelToken);
-                    _writeLock.Release();
-                    cancelToken.ThrowIfCancellationRequested();
-                    break;
-                case Opcode.Pong:
-                    break;
-                default:
-                    throw new InvalidOperationException($"Discord sent unexpected payload: {opCode}: {Encoding.UTF8.GetString(payload)}");
+                if (_pipeClientStream is null)
+                {
+                    await Connect(cancelToken);
+                    continue;
+                }
+
+                var opCode = (Opcode)await ReadUInt32Async(_pipeClientStream, cancelToken);
+                var length = await ReadUInt32Async(_pipeClientStream, cancelToken);
+                var payload = new byte[length];
+                await _pipeClientStream.ReadExactlyAsync(payload, 0, Convert.ToInt32(length), cancelToken);
+                cancelToken.ThrowIfCancellationRequested();
+
+                switch (opCode)
+                {
+                    case Opcode.Close:
+                        var close = JsonSerializer.Deserialize(payload, CloseContext.Default.Close)!;
+                        throw new InvalidOperationException($"Discord closed the connection with error {close.code}: {close.message}");
+                    case Opcode.Frame:
+                        var message = JsonSerializer.Deserialize(payload, MessageContext.Default.Message);
+                        if (message?.evt == Event.ERROR.ToString())
+                            throw new InvalidOperationException($"Discord returned error: {message.data}");
+                        if (message?.evt == Event.READY.ToString())
+                            _isReady = true;
+                        break;
+                    case Opcode.Ping:
+                        var buff = new byte[length + 8];
+                        BitConverter.GetBytes(Convert.ToUInt32(Opcode.Pong)).CopyTo(buff, 0);
+                        BitConverter.GetBytes(length).CopyTo(buff, 4);
+                        payload.CopyTo(buff, 8);
+                        await _writeLock.WaitAsync(cancelToken);
+                        await _pipeClientStream.WriteAsync(buff, cancelToken);
+                        await _pipeClientStream.FlushAsync(cancelToken);
+                        _writeLock.Release();
+                        cancelToken.ThrowIfCancellationRequested();
+                        break;
+                    case Opcode.Pong:
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Discord sent unexpected payload: {opCode}: {Encoding.UTF8.GetString(payload)}");
+                }
+            }
+            catch (EndOfStreamException)
+            {
+                _isReady = false;
+                _pipeClientStream = null;
             }
         }
     }
 
-    public async Task Connect(CancellationToken cancelToken)
+    public async Task SetPresenceAsync(RichPresence presence, CancellationToken cancelToken)
     {
-        for (var i = 0; i < 10; ++i)
+        if (!_isReady)
+            return;
+        var cmd = new PresenceCommand(ProcessId, presence);
+        var frame = new Message(Command.SET_ACTIVITY.ToString(), null, (++_nonce).ToString(), null, cmd);
+        await WriteFrameAsync(frame, cancelToken);
+    }
+
+    public void Dispose()
+    {
+        _pipeClientStream?.Dispose();
+    }
+
+    private async Task Connect(CancellationToken cancelToken)
+    {
+        for (; _pipeClientStream?.IsConnected is not true; await Task.Delay(TimeSpan.FromSeconds(10), cancelToken))
         {
-            _pipeClientStream = new NamedPipeClientStream(".", GetPipeName(i), PipeDirection.InOut, PipeOptions.Asynchronous);
-            await _pipeClientStream.ConnectAsync(TimeSpan.FromMilliseconds(200), cancelToken);
-            cancelToken.ThrowIfCancellationRequested();
-            if (_pipeClientStream.IsConnected)
+            for (var i = 0; i < 10; ++i)
+            {
+                _pipeClientStream = new NamedPipeClientStream(".", GetPipeName(i), PipeDirection.InOut, PipeOptions.Asynchronous);
+                try
+                {
+                    await _pipeClientStream.ConnectAsync(TimeSpan.FromMilliseconds(200), cancelToken);
+                }
+                catch (TimeoutException)
+                {
+                }
+
+                cancelToken.ThrowIfCancellationRequested();
+                if (_pipeClientStream.IsConnected)
+                    break;
+            }
+
+            if (_pipeClientStream?.IsConnected is true)
                 break;
         }
-
-        if (_pipeClientStream?.IsConnected is not true)
-            throw new InvalidOperationException("Failed to connect to discord ipc");
 
         await WriteFrameAsync(new HandShake(_discordClientId), cancelToken);
 
@@ -93,20 +130,6 @@ public class DiscordPipeClient : IDisposable
             var pipeName = $"discord-ipc-{pipe}";
             return Environment.OSVersion.Platform is PlatformID.Unix ? Path.Combine(GetTemporaryDirectory(), pipeName) : pipeName;
         }
-    }
-
-    public async Task SetPresenceAsync(RichPresence presence, CancellationToken cancelToken)
-    {
-        if (!_isReady)
-            return;
-        var cmd = new PresenceCommand(ProcessId, presence);
-        var frame = new Message(Command.SET_ACTIVITY.ToString(), null, (++_nonce).ToString(), null, cmd);
-        await WriteFrameAsync(frame, cancelToken);
-    }
-
-    public void Dispose()
-    {
-        _pipeClientStream?.Dispose();
     }
 
     private async Task<uint> ReadUInt32Async(Stream stream, CancellationToken cancelToken)
