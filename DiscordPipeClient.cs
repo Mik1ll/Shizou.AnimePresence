@@ -1,19 +1,21 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Channels;
 
 namespace Shizou.MpvDiscordPresence;
 
 public class DiscordPipeClient : IDisposable
 {
-    private readonly ConcurrentDictionary<int, Channel<DiscordPipeResponse>> _responses = new();
+    private static readonly int ProcessId = Process.GetCurrentProcess().Id;
+    private static readonly JsonSerializerOptions JsonOpts = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
     private readonly string _discordClientId;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private NamedPipeClientStream? _pipeClientStream;
+    private int _nonce;
+    private bool _isReady;
 
     public DiscordPipeClient(string discordClientId) => _discordClientId = discordClientId;
 
@@ -28,6 +30,7 @@ public class DiscordPipeClient : IDisposable
             var length = await ReadUInt32Async(_pipeClientStream, cancelToken);
             var payload = new byte[length];
             await _pipeClientStream.ReadExactlyAsync(payload, 0, Convert.ToInt32(length), cancelToken);
+            cancelToken.ThrowIfCancellationRequested();
             switch (opCode)
             {
                 case Opcode.Close:
@@ -35,6 +38,10 @@ public class DiscordPipeClient : IDisposable
                     throw new InvalidOperationException($"Discord closed the connection with error {close.code}: {close.message}");
                 case Opcode.Frame:
                     var message = JsonSerializer.Deserialize<Message>(payload);
+                    if (message?.evt is Event.ERROR)
+                        throw new InvalidOperationException($"Discord returned error: {message.data}");
+                    if (message?.evt is Event.READY)
+                        _isReady = true;
                     break;
                 case Opcode.Ping:
                     var buff = new byte[length + 8];
@@ -52,15 +59,6 @@ public class DiscordPipeClient : IDisposable
                 default:
                     throw new InvalidOperationException($"Discord sent unexpected payload: {opCode}: {Encoding.UTF8.GetString(payload)}");
             }
-        }
-    }
-
-    public async Task UpdatePresenceLoop(CancellationToken cancelToken)
-    {
-        if (_pipeClientStream is null)
-            return;
-        while (!cancelToken.IsCancellationRequested)
-        {
         }
     }
 
@@ -97,6 +95,15 @@ public class DiscordPipeClient : IDisposable
         }
     }
 
+    public async Task SetPresenceAsync(RichPresence presence, CancellationToken cancelToken)
+    {
+        if (!_isReady)
+            return;
+        var cmd = new PresenceCommand(ProcessId, presence);
+        var frame = new Message(Command.SET_ACTIVITY, null, (++_nonce).ToString(), null, cmd);
+        await WriteFrameAsync(frame, cancelToken);
+    }
+
     public void Dispose()
     {
         _pipeClientStream?.Dispose();
@@ -121,7 +128,7 @@ public class DiscordPipeClient : IDisposable
             HandShake => Opcode.Handshake,
             _ => throw new ArgumentOutOfRangeException(nameof(payload), payload, null)
         }));
-        var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload);
+        var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload, JsonOpts);
         var lengthBytes = BitConverter.GetBytes(Convert.ToUInt32(payloadBytes.Length));
         var buff = new byte[opCodeBytes.Length + lengthBytes.Length + payloadBytes.Length];
         opCodeBytes.CopyTo(buff, 0);
@@ -135,16 +142,12 @@ public class DiscordPipeClient : IDisposable
     }
 }
 
-public record DiscordPipeRequest;
-
-public record DiscordPipeResponse;
-
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global")]
 public record HandShake(string client_id, int v = 1);
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]
-public record Message(Command cmd, Event? evt, string? nonce, JsonElement data, JsonElement args);
+public record Message(Command cmd, Event? evt, string? nonce, object? data, object? args);
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 public record Close(int code, string message);
@@ -173,3 +176,7 @@ public enum Opcode : uint
     Ping = 3,
     Pong = 4
 }
+
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+[SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global")]
+public record PresenceCommand(int pid, RichPresence activity);

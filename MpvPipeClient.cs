@@ -3,7 +3,6 @@ using System.IO.Pipes;
 using System.Text.Json;
 using System.Threading.Channels;
 using System.Web;
-using DiscordRPC;
 
 namespace Shizou.MpvDiscordPresence;
 
@@ -12,14 +11,13 @@ public class MpvPipeClient : IDisposable
     private readonly NamedPipeClientStream _pipeClientStream;
     private readonly Random _random = new();
     private readonly ConcurrentDictionary<int, Channel<MpvPipeResponse>> _responses = new();
-    private readonly DiscordRpcClient _discordClient;
+    private readonly DiscordPipeClient _discordClient;
     private StreamReader? _lineReader;
     private StreamWriter? _lineWriter;
-    private bool _discordReady;
 
-    public MpvPipeClient(string serverPath, string discordClientId)
+    public MpvPipeClient(string serverPath, DiscordPipeClient discordClient)
     {
-        _discordClient = new DiscordRpcClient(discordClientId);
+        _discordClient = discordClient;
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous);
     }
 
@@ -71,13 +69,9 @@ public class MpvPipeClient : IDisposable
 
     public async Task QueryLoop(CancellationToken cancelToken)
     {
-        _discordClient.OnReady += (_, _) => _discordReady = true;
-        _discordClient.Initialize();
         await Task.Yield();
         for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
-            if (!_discordReady)
-                continue;
             var path = await GetPropertyStringAsync("path", cancelToken);
             var uri = new Uri(path);
             var fileQuery = HttpUtility.ParseQueryString(uri.Query);
@@ -99,8 +93,8 @@ public class MpvPipeClient : IDisposable
 
             var newPresence = new RichPresence
             {
-                Details = SmartStringTrim(animeName, 64),
-                State = epNo[0] switch
+                details = SmartStringTrim(animeName, 64),
+                state = epNo[0] switch
                 {
                     'S' => "Special " + epNo[1..],
                     'C' => "Credit " + epNo[1..],
@@ -109,24 +103,23 @@ public class MpvPipeClient : IDisposable
                     'O' => "Other " + epNo[1..],
                     _ => "Episode " + epNo
                 },
-                Timestamps = paused ? null : Timestamps.FromTimeSpan(timeLeft),
-                Assets = new Assets
+                timestamps = paused ? null : TimeStamps.FromTimeRemaining(timeLeft),
+                assets = new Assets
                 {
-                    LargeImageKey = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
-                    LargeImageText = string.IsNullOrWhiteSpace(episodeName) ? "mpv" : SmartStringTrim(episodeName, 64),
-                    SmallImageKey = paused ? "pause" : "play",
-                    SmallImageText = paused ? "Paused" : "Playing"
+                    large_image = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
+                    large_text = string.IsNullOrWhiteSpace(episodeName) ? "mpv" : SmartStringTrim(episodeName, 64),
+                    small_image = paused ? "pause" : "play",
+                    small_text = paused ? "Paused" : "Playing"
                 },
-                Buttons = [new Button { Url = $"https://anidb.net/anime/{animeId}", Label = "View Anime" }]
+                buttons = [new Button { label = "View Anime", url = $"https://anidb.net/anime/{animeId}" }]
             };
-            _discordClient.SetPresence(newPresence);
+            await _discordClient.SetPresenceAsync(newPresence, cancelToken);
         }
     }
 
     public void Dispose()
     {
         _pipeClientStream.Dispose();
-        _discordClient.Dispose();
     }
 
     private MpvPipeRequest NewRequest(params string[] command)

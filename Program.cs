@@ -6,13 +6,14 @@ if (args.Length != 2)
 var discordClientId = args[0];
 var socketName = args[1];
 
-var cancelSource = new CancellationTokenSource();
-using var client = new MpvPipeClient(socketName, discordClientId);
-
 try
 {
-    await client.Connect(cancelSource.Token);
-    var tasks = new[] { client.ReadLoop(cancelSource.Token), client.QueryLoop(cancelSource.Token) };
+    var cancelSource = new CancellationTokenSource();
+    using var discordClient = new DiscordPipeClient(discordClientId);
+    using var mpvClient = new MpvPipeClient(socketName, discordClient);
+    await mpvClient.Connect(cancelSource.Token);
+    await discordClient.Connect(cancelSource.Token);
+    var tasks = new[] { mpvClient.ReadLoop(cancelSource.Token), mpvClient.QueryLoop(cancelSource.Token), discordClient.ReadLoop(cancelSource.Token) };
 
     Task.WaitAny(tasks);
     await cancelSource.CancelAsync();
