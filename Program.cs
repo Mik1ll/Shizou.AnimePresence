@@ -22,7 +22,3 @@ catch (AggregateException ae)
 {
     ae.Handle(ex => ex is OperationCanceledException or IOException);
 }
-finally
-{
-    Console.WriteLine("Stopping subprocess");
-}

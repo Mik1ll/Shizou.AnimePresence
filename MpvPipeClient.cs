@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.IO.Pipes;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using System.Web;
 
@@ -171,3 +172,21 @@ public class MpvPipeClient : IDisposable
         }
     }
 }
+
+// ReSharper disable InconsistentNaming
+public record MpvPipeRequest(string[] command, int request_id);
+
+// ReSharper restore InconsistantNaming
+
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSerializable(typeof(MpvPipeRequest))]
+internal partial class RequestContext : JsonSerializerContext;
+
+// ReSharper disable InconsistentNaming
+public record MpvPipeResponse(string? error, JsonElement data, int? request_id, string? @event);
+
+// ReSharper restore InconsistantNaming
+
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSerializable(typeof(MpvPipeResponse))]
+internal partial class ResponseContext : JsonSerializerContext;

@@ -91,7 +91,7 @@ public class DiscordPipeClient : IDisposable
 
     private async Task Connect(CancellationToken cancelToken)
     {
-        for (; _pipeClientStream?.IsConnected is not true; await Task.Delay(TimeSpan.FromSeconds(10), cancelToken))
+        while (_pipeClientStream?.IsConnected is not true)
         {
             for (var i = 0; i < 10; ++i)
             {
@@ -99,21 +99,24 @@ public class DiscordPipeClient : IDisposable
                 try
                 {
                     await _pipeClientStream.ConnectAsync(TimeSpan.FromMilliseconds(200), cancelToken);
+                    cancelToken.ThrowIfCancellationRequested();
                 }
                 catch (TimeoutException)
                 {
                 }
 
-                cancelToken.ThrowIfCancellationRequested();
                 if (_pipeClientStream.IsConnected)
                     break;
             }
 
             if (_pipeClientStream?.IsConnected is true)
                 break;
+            await Task.Delay(TimeSpan.FromSeconds(10), cancelToken);
+            cancelToken.ThrowIfCancellationRequested();
         }
 
         await WriteFrameAsync(new HandShake(_discordClientId), cancelToken);
+        cancelToken.ThrowIfCancellationRequested();
 
         static string GetTemporaryDirectory()
         {
