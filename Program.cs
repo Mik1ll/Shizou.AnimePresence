@@ -22,3 +22,6 @@ catch (AggregateException ae)
 {
     ae.Handle(ex => ex is OperationCanceledException or IOException);
 }
+catch (Exception e) when (e is OperationCanceledException or IOException)
+{
+}

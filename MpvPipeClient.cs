@@ -74,12 +74,17 @@ public class MpvPipeClient : IDisposable
         for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
             var path = await GetPropertyStringAsync("path", cancelToken);
-            var uri = new Uri(path);
+            if (!Uri.TryCreate(path, UriKind.Absolute, out var uri) || !new[] { Uri.UriSchemeHttp, Uri.UriSchemeHttps }.Contains(uri.Scheme))
+            {
+                Console.WriteLine("Path is not an http URL, exiting");
+                return;
+            }
+
             var fileQuery = HttpUtility.ParseQueryString(uri.Query);
             var appId = fileQuery.Get("appId");
             if (!string.Equals(appId, "shizou", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine("App id in query string did not match/exist, exiting");
+                Console.WriteLine("App id in query string did not match shizou, exiting");
                 return;
             }
 
