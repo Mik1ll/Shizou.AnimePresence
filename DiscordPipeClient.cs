@@ -168,6 +168,7 @@ public class DiscordPipeClient : IDisposable
         }
 
         var opCodeBytes = BitConverter.GetBytes(Convert.ToUInt32(opcode));
+//        var payloadString = JsonSerializer.Serialize(payload, jsonTypeInfo);
         var payloadBytes = JsonSerializer.SerializeToUtf8Bytes(payload, jsonTypeInfo);
         var lengthBytes = BitConverter.GetBytes(Convert.ToUInt32(payloadBytes.Length));
         var buff = new byte[opCodeBytes.Length + lengthBytes.Length + payloadBytes.Length];

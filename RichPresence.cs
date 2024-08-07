@@ -97,6 +97,8 @@ public record RichPresence
             : value;
     }
 
+    public bool instance { get; init; } = true;
+
     public static string GetBoundedString(string value, int byteLength, [CallerMemberName] string? propertyName = null)
     {
         value = value.Trim();
