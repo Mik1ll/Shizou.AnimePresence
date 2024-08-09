@@ -14,7 +14,6 @@ public class DiscordPipeClient : IDisposable
     private readonly string _discordClientId;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private NamedPipeClientStream? _pipeClientStream;
-    private int _nonce;
     private bool _isReady;
 
     public DiscordPipeClient(string discordClientId) => _discordClientId = discordClientId;
@@ -79,8 +78,9 @@ public class DiscordPipeClient : IDisposable
     {
         if (!_isReady)
             return;
+        
         var cmd = new PresenceCommand(ProcessId, presence);
-        var frame = new Message(Command.SET_ACTIVITY.ToString(), null, (++_nonce).ToString(), null, cmd);
+        var frame = new Message(Command.SET_ACTIVITY.ToString(), null, Guid.NewGuid().ToString(), null, cmd);
         await WriteFrameAsync(frame, cancelToken);
     }
 
