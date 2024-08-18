@@ -93,6 +93,7 @@ public class MpvPipeClient : IDisposable
             var animeId = fileQuery.Get("animeId") ?? throw new NullReferenceException("Anime ID cannot be null");
             var animeName = fileQuery.Get("animeName") ?? throw new NullReferenceException("Anime name cannot be null");
             var epNo = fileQuery.Get("epNo") ?? throw new NullReferenceException("Episode Number cannot be null");
+            var epCount = fileQuery.Get("epCount");
 
             var timeLeft = (await GetPropertyAsync("playtime-remaining", cancelToken)).GetDouble();
             var playbackTime = (await GetPropertyAsync("playback-time", cancelToken)).GetDouble();
@@ -108,15 +109,13 @@ public class MpvPipeClient : IDisposable
                     'T' => "Trailer " + epNo[1..],
                     'P' => "Parody " + epNo[1..],
                     'O' => "Other " + epNo[1..],
-                    _ => "Episode " + epNo
+                    _ => "Episode " + epNo + (epCount is null ? string.Empty : $" of {epCount}")
                 },
                 timestamps = paused ? null : TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
                 assets = new Assets
                 {
                     large_image = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
                     large_text = string.IsNullOrWhiteSpace(episodeName) ? "mpv" : SmartStringTrim(episodeName, 64),
-                    small_image = paused ? "pause" : "play",
-                    small_text = paused ? "Paused" : "Playing"
                 },
                 buttons = [new Button { label = "View Anime", url = $"https://anidb.net/anime/{animeId}" }]
             };

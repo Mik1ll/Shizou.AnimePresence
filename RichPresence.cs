@@ -4,6 +4,16 @@ using System.Text;
 
 namespace Shizou.MpvDiscordPresence;
 
+public enum ActivityType
+{
+    Playing = 0,
+    Streaming = 1,
+    Listening = 2,
+    Watching = 3,
+    Custom = 4,
+    Competing = 5
+}
+
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 public record Button
 {
@@ -28,23 +38,21 @@ public record Button
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 public record Assets
 {
-    private readonly string _smallImage;
-    private readonly string _smallText;
+    private readonly string? _smallImage;
+    private readonly string? _smallText;
     private readonly string _largeImage;
     private readonly string _largeText;
 
-    public required string small_image
+    public string? small_image
     {
         get => _smallImage;
-        [MemberNotNull(nameof(_smallImage))]
-        init => _smallImage = RichPresence.GetBoundedString(value, 256);
+        init => _smallImage = value is null ? null : RichPresence.GetBoundedString(value, 256);
     }
 
-    public required string small_text
+    public string? small_text
     {
         get => _smallText;
-        [MemberNotNull(nameof(_smallText))]
-        init => _smallText = RichPresence.GetBoundedString(value, 128);
+        init => _smallText = value is null ? null : RichPresence.GetBoundedString(value, 128);
     }
 
     public required string large_image
@@ -78,16 +86,9 @@ public record TimeStamps
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 public record Party
 {
-    public string? id { get; init; }
+    public string id { get; init; } = "party-test";
 
-    public required PartySize size { get; init; }
-}
-
-[SuppressMessage("ReSharper", "InconsistentNaming")]
-public record PartySize
-{
-    public int currentSize { get; init; }
-    public int maxSize { get; init; }
+    public required int[] size { get; init; }
 }
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]
@@ -96,6 +97,8 @@ public record RichPresence
     private readonly Button[]? _buttons;
     private readonly string _details;
     private readonly string _state;
+
+    public int type { get; init; } = (int)ActivityType.Watching;
 
     public required string details
     {

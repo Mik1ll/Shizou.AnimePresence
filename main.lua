@@ -1,6 +1,6 @@
 ﻿local mp = require("mp")
 
-local discord_client_id_str = "737663962677510245"
+local discord_client_id_str = "1230418743734042694"
 local socket_name = "/tmp/shizou-socket"
 local toggle_keybind = "ctrl+d"
 
