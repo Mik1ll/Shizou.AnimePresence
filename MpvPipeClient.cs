@@ -95,6 +95,7 @@ public class MpvPipeClient : IDisposable
             var epNo = fileQuery.Get("epNo") ?? throw new NullReferenceException("Episode Number cannot be null");
 
             var timeLeft = (await GetPropertyAsync("playtime-remaining", cancelToken)).GetDouble();
+            var playbackTime = (await GetPropertyAsync("playback-time", cancelToken)).GetDouble();
             var paused = (await GetPropertyAsync("pause", cancelToken)).GetBoolean();
 
             var newPresence = new RichPresence
@@ -109,7 +110,7 @@ public class MpvPipeClient : IDisposable
                     'O' => "Other " + epNo[1..],
                     _ => "Episode " + epNo
                 },
-                timestamps = paused ? null : TimeStamps.FromTimeRemaining(timeLeft),
+                timestamps = paused ? null : TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
                 assets = new Assets
                 {
                     large_image = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",

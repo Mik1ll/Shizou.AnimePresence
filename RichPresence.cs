@@ -13,13 +13,15 @@ public record Button
     public required string label
     {
         get => _label;
-        [MemberNotNull(nameof(_label))] init => _label = RichPresence.GetBoundedString(value, 32);
+        [MemberNotNull(nameof(_label))]
+        init => _label = RichPresence.GetBoundedString(value, 32);
     }
 
     public required string url
     {
         get => _url;
-        [MemberNotNull(nameof(_url))] init => _url = RichPresence.GetBoundedString(value, 512);
+        [MemberNotNull(nameof(_url))]
+        init => _url = RichPresence.GetBoundedString(value, 512);
     }
 }
 
@@ -34,25 +36,29 @@ public record Assets
     public required string small_image
     {
         get => _smallImage;
-        [MemberNotNull(nameof(_smallImage))] init => _smallImage = RichPresence.GetBoundedString(value, 256);
+        [MemberNotNull(nameof(_smallImage))]
+        init => _smallImage = RichPresence.GetBoundedString(value, 256);
     }
 
     public required string small_text
     {
         get => _smallText;
-        [MemberNotNull(nameof(_smallText))] init => _smallText = RichPresence.GetBoundedString(value, 128);
+        [MemberNotNull(nameof(_smallText))]
+        init => _smallText = RichPresence.GetBoundedString(value, 128);
     }
 
     public required string large_image
     {
         get => _largeImage;
-        [MemberNotNull(nameof(_largeImage))] init => _largeImage = RichPresence.GetBoundedString(value, 256);
+        [MemberNotNull(nameof(_largeImage))]
+        init => _largeImage = RichPresence.GetBoundedString(value, 256);
     }
 
     public required string large_text
     {
         get => _largeText;
-        [MemberNotNull(nameof(_largeText))] init => _largeText = RichPresence.GetBoundedString(value, 128);
+        [MemberNotNull(nameof(_largeText))]
+        init => _largeText = RichPresence.GetBoundedString(value, 128);
     }
 }
 
@@ -62,8 +68,26 @@ public record TimeStamps
     public long? start { get; init; }
     public long? end { get; init; }
 
-    public static TimeStamps FromTimeRemaining(double seconds) => new()
-        { start = DateTimeOffset.UtcNow.ToUnixTimeSeconds(), end = (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(seconds)).ToUnixTimeSeconds() };
+    public static TimeStamps FromPlaybackPosition(double played, double remaining) => new()
+    {
+        start = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(played)).ToUnixTimeSeconds(),
+        end = (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(remaining)).ToUnixTimeSeconds()
+    };
+}
+
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+public record Party
+{
+    public string? id { get; init; }
+
+    public required PartySize size { get; init; }
+}
+
+[SuppressMessage("ReSharper", "InconsistentNaming")]
+public record PartySize
+{
+    public int currentSize { get; init; }
+    public int maxSize { get; init; }
 }
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]
@@ -76,18 +100,22 @@ public record RichPresence
     public required string details
     {
         get => _details;
-        [MemberNotNull(nameof(_details))] init => _details = GetBoundedString(value, 128);
+        [MemberNotNull(nameof(_details))]
+        init => _details = GetBoundedString(value, 128);
     }
 
     public required string state
     {
         get => _state;
-        [MemberNotNull(nameof(_state))] init => _state = GetBoundedString(value, 128);
+        [MemberNotNull(nameof(_state))]
+        init => _state = GetBoundedString(value, 128);
     }
 
     public Assets? assets { get; init; }
 
     public TimeStamps? timestamps { get; init; }
+
+    public Party? party { get; init; }
 
     public Button[]? buttons
     {
