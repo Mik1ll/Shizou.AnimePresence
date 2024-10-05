@@ -1,7 +1,9 @@
 ﻿local mp = require("mp")
+local utils = require("mp.utils")
 
 local discord_client_id_str = "1230418743734042694"
-local socket_name = "/tmp/shizou-socket"
+local pid = utils.getpid()
+local socket_name = "/tmp/mpv-socket" .. '-' .. pid
 local toggle_keybind = "ctrl+d"
 
 local function file_exists(name)
