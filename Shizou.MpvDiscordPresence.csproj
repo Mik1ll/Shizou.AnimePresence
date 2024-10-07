@@ -18,15 +18,17 @@
     </ItemGroup>
 
     <Target Name="UpdateAssemblyInfo" BeforeTargets="BeforeCompile">
-        <Exec Command="git describe --match=MpvDiscordPresence/v[0-9]%2A --tags --abbrev=0 --always" ConsoleToMsBuild="true">
-            <Output TaskParameter="ConsoleOutput" PropertyName="GitVerTag"/>
-        </Exec>
-        <Exec Command="git describe --match=MpvDiscordPresence/v[0-9]%2A --tags --abbrev=7 --always --long --dirty" ConsoleToMsBuild="true">
+        <Exec Command="git describe --match=MpvDiscordPresence/v[0-9]%2A.[0-9]%2A.[0-9]%2A --tags --abbrev=7 --always --long --dirty" ConsoleToMsBuild="true">
             <Output TaskParameter="ConsoleOutput" PropertyName="GitInfo"/>
         </Exec>
+
+        <PropertyGroup>
+            <Version>$([System.Text.RegularExpressions.Regex]::Match("$(GitInfo)", "\d+\.\d+\.\d+"))</Version>
+        </PropertyGroup>
+
         <ItemGroup>
             <AssemblyAttributes Include="AssemblyVersion">
-                <_Parameter1>$([System.Text.RegularExpressions.Regex]::Match("$(GitVerTag)", "\d+\.\d+\.\d+"))</_Parameter1>
+                <_Parameter1>$(Version)</_Parameter1>
             </AssemblyAttributes>
             <AssemblyAttributes Include="AssemblyInformationalVersion">
                 <_Parameter1>$(GitInfo)</_Parameter1>
@@ -56,7 +58,7 @@
 
         <Copy SourceFiles="@(ZipOut)" DestinationFolder="$(ZipDir)$(ProjectName)/%(RecursiveDir)"/>
         <ZipDirectory SourceDirectory="$(ZipDir)"
-                      DestinationFile='$(OutDir)$(ProjectName)_$(RuntimeIdentifier)_$([System.Text.RegularExpressions.Regex]::Match("$(GitInfo)", "[^/]+%24")).zip'
+                      DestinationFile='$(OutDir)$(ProjectName)_$([MSBuild]::ValueOrDefault("$(RuntimeIdentifier)","Portable"))_$([System.Text.RegularExpressions.Regex]::Match("$(GitInfo)", "[^/]+%24")).zip'
                       Overwrite="true"/>
         <RemoveDir Directories="$(ZipDir)"/>
     </Target>
