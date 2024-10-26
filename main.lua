@@ -20,7 +20,7 @@ if script_dir == nil then
 	return
 end
 
-local exePath = script_dir .. "/" .. "Shizou.MpvDiscordPresence";
+local exePath = script_dir .. "/" .. "Shizou.AnimePresence";
 if not file_exists(exePath) then
     exePath = exePath .. ".exe"
     if not file_exists(exePath) then

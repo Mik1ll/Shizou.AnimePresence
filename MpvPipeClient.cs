@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Channels;
 using System.Web;
 
-namespace Shizou.MpvDiscordPresence;
+namespace Shizou.AnimePresence;
 
 public class MpvPipeClient : IDisposable
 {

@@ -1,4 +1,4 @@
-﻿using Shizou.MpvDiscordPresence;
+﻿using Shizou.AnimePresence;
 
 if (args.Length != 2)
     throw new InvalidOperationException("Must provide two arguments: discord client id and ipc socket/pipe name");
