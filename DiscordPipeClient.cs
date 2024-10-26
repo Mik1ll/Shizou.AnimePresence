@@ -181,6 +181,27 @@ public class DiscordPipeClient : IDisposable
         _writeLock.Release();
         cancelToken.ThrowIfCancellationRequested();
     }
+
+    private static string SmartStringTrim(string str, int length)
+    {
+        if (str.Length <= length)
+            return str;
+        return str[..str[..(length + 1)].LastIndexOf(' ')] + "...";
+    }
+
+    public static RichPresence CreateNewPresence(QueryInfo queryInfo, bool paused, double playbackTime, double timeLeft) =>
+        new()
+        {
+            details = SmartStringTrim(queryInfo.AnimeName, 64),
+            state = $"{queryInfo.EpisodeType} {queryInfo.EpisodeNumber}{(queryInfo.EpisodeCount is null ? string.Empty : $" of {queryInfo.EpisodeCount}")}",
+            timestamps = paused ? null : TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
+            assets = new Assets
+            {
+                large_image = string.IsNullOrWhiteSpace(queryInfo.PosterUrl) ? "mpv" : queryInfo.PosterUrl,
+                large_text = string.IsNullOrWhiteSpace(queryInfo.EpisodeName) ? "mpv" : SmartStringTrim(queryInfo.EpisodeName, 64),
+            },
+            buttons = queryInfo.AnimeUrl is null ? [] : [new Button { label = "View Anime", url = queryInfo.AnimeUrl }]
+        };
 }
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]

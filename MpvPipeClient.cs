@@ -3,7 +3,6 @@ using System.IO.Pipes;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
-using System.Web;
 
 namespace Shizou.AnimePresence;
 
@@ -13,20 +12,15 @@ public class MpvPipeClient : IDisposable
     private readonly Random _random = new();
     private readonly ConcurrentDictionary<int, Channel<MpvPipeResponse>> _responses = new();
     private readonly DiscordPipeClient _discordClient;
+    private readonly bool _allowRestricted;
     private StreamReader? _lineReader;
     private StreamWriter? _lineWriter;
 
-    public MpvPipeClient(string serverPath, DiscordPipeClient discordClient)
+    public MpvPipeClient(string serverPath, DiscordPipeClient discordClient, bool allowRestricted)
     {
         _discordClient = discordClient;
+        _allowRestricted = allowRestricted;
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous);
-    }
-
-    private static string SmartStringTrim(string str, int length)
-    {
-        if (str.Length <= length)
-            return str;
-        return str[..str[..(length + 1)].LastIndexOf(' ')] + "...";
     }
 
     public async Task Connect(CancellationToken cancelToken)
@@ -74,51 +68,15 @@ public class MpvPipeClient : IDisposable
         for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
             var path = await GetPropertyStringAsync("path", cancelToken);
-            if (!Uri.TryCreate(path, UriKind.Absolute, out var uri) || !new[] { Uri.UriSchemeHttp, Uri.UriSchemeHttps }.Contains(uri.Scheme))
-            {
-                Console.WriteLine("Path is not an http URL, exiting");
+            var queryInfo = QueryInfo.GetQueryInfo(path, _allowRestricted);
+            if (queryInfo is null)
                 return;
-            }
-
-            var fileQuery = HttpUtility.ParseQueryString(uri.Query);
-            var appId = fileQuery.Get("appId");
-            if (!string.Equals(appId, "shizou", StringComparison.OrdinalIgnoreCase))
-            {
-                Console.WriteLine("App id in query string did not match shizou, exiting");
-                return;
-            }
-
-            var posterFilename = fileQuery.Get("posterFilename");
-            var episodeName = fileQuery.Get("episodeName");
-            var animeId = fileQuery.Get("animeId") ?? throw new NullReferenceException("Anime ID cannot be null");
-            var animeName = fileQuery.Get("animeName") ?? throw new NullReferenceException("Anime name cannot be null");
-            var epNo = fileQuery.Get("epNo") ?? throw new NullReferenceException("Episode Number cannot be null");
-            var epCount = fileQuery.Get("epCount");
 
             var timeLeft = (await GetPropertyAsync("playtime-remaining", cancelToken)).GetDouble();
             var playbackTime = (await GetPropertyAsync("playback-time", cancelToken)).GetDouble();
             var paused = (await GetPropertyAsync("pause", cancelToken)).GetBoolean();
 
-            var newPresence = new RichPresence
-            {
-                details = SmartStringTrim(animeName, 64),
-                state = epNo[0] switch
-                {
-                    'S' => "Special " + epNo[1..],
-                    'C' => "Credit " + epNo[1..],
-                    'T' => "Trailer " + epNo[1..],
-                    'P' => "Parody " + epNo[1..],
-                    'O' => "Other " + epNo[1..],
-                    _ => "Episode " + epNo + (epCount is null ? string.Empty : $" of {epCount}")
-                },
-                timestamps = paused ? null : TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
-                assets = new Assets
-                {
-                    large_image = string.IsNullOrWhiteSpace(posterFilename) ? "mpv" : $"https://cdn.anidb.net/images/main/{posterFilename}",
-                    large_text = string.IsNullOrWhiteSpace(episodeName) ? "mpv" : SmartStringTrim(episodeName, 64),
-                },
-                buttons = [new Button { label = "View Anime", url = $"https://anidb.net/anime/{animeId}" }]
-            };
+            var newPresence = DiscordPipeClient.CreateNewPresence(queryInfo, paused, playbackTime, timeLeft);
             await _discordClient.SetPresenceAsync(newPresence, cancelToken);
         }
     }

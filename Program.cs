@@ -1,16 +1,18 @@
 ﻿using Shizou.AnimePresence;
 
+
 if (args.Length != 2)
     throw new InvalidOperationException("Must provide two arguments: discord client id and ipc socket/pipe name");
 
 var discordClientId = args[0];
 var socketName = args[1];
+var allowRestricted = bool.Parse(args[2]);
 
 try
 {
     var cancelSource = new CancellationTokenSource();
     using var discordClient = new DiscordPipeClient(discordClientId);
-    using var mpvClient = new MpvPipeClient(socketName, discordClient);
+    using var mpvClient = new MpvPipeClient(socketName, discordClient, allowRestricted);
     await mpvClient.Connect(cancelSource.Token);
     var tasks = new[] { mpvClient.ReadLoop(cancelSource.Token), mpvClient.QueryLoop(cancelSource.Token), discordClient.ReadLoop(cancelSource.Token) };
 
@@ -24,4 +26,9 @@ catch (AggregateException ae)
 }
 catch (Exception e) when (e is OperationCanceledException or IOException)
 {
+}
+
+public static partial class Program
+{
+    public const string AppId = "07a58b50-5109-5aa3-abbc-782fed0df04f";
 }
