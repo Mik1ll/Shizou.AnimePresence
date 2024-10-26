@@ -78,7 +78,7 @@ public class DiscordPipeClient : IDisposable
     {
         if (!_isReady)
             return;
-        
+
         var cmd = new PresenceCommand(ProcessId, presence);
         var frame = new Message(Command.SET_ACTIVITY.ToString(), null, Guid.NewGuid().ToString(), null, cmd);
         await WriteFrameAsync(frame, cancelToken);
@@ -193,7 +193,8 @@ public class DiscordPipeClient : IDisposable
         new()
         {
             details = SmartStringTrim(queryInfo.AnimeName, 64),
-            state = $"{queryInfo.EpisodeType} {queryInfo.EpisodeNumber}{(queryInfo.EpisodeCount is null ? string.Empty : $" of {queryInfo.EpisodeCount}")}",
+            state =
+                $"{queryInfo.EpisodeType} {queryInfo.EpisodeNumber}{(queryInfo.EpisodeType != "Episode" || queryInfo.EpisodeCount is null ? string.Empty : $" of {queryInfo.EpisodeCount}")}",
             timestamps = paused ? null : TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
             assets = new Assets
             {
