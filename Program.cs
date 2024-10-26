@@ -1,8 +1,8 @@
 ﻿using Shizou.AnimePresence;
 
 
-if (args.Length != 2)
-    throw new InvalidOperationException("Must provide two arguments: discord client id and ipc socket/pipe name");
+if (args.Length != 3)
+    throw new InvalidOperationException("Must provide three arguments: discord client id, ipc socket/pipe name, and allow restricted (bool)");
 
 var discordClientId = args[0];
 var socketName = args[1];
