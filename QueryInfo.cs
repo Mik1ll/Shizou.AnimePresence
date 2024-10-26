@@ -63,6 +63,9 @@ public class QueryInfo
             _ => "Episode"
         };
 
+        if (!char.IsDigit(episodeNumber[0]) && episodeType != "Episode")
+            episodeNumber = episodeNumber[1..];
+
         // Don't show poster if it could be NSFW
         var posterUrl = restrictedSpecified && !restricted
             ? fileQuery.Get("posterUrl") ??
