@@ -196,15 +196,17 @@ public class DiscordPipeClient : IDisposable
         return new RichPresence
         {
             details = SmartStringTrim(queryInfo.AnimeName, 64),
-            state =
-                $"{queryInfo.EpisodeType} {queryInfo.EpisodeNumber}{(queryInfo.EpisodeType != "Episode" || queryInfo.EpisodeCount is null ? string.Empty : $" of {queryInfo.EpisodeCount}")}",
+            state = $"{queryInfo.EpisodeType} {queryInfo.EpisodeNumber}" +
+                queryInfo.EpisodeType != "Episode" || queryInfo.EpisodeCount is null
+                    ? string.Empty
+                    : $" of {queryInfo.EpisodeCount}",
             timestamps = TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
             assets = new Assets
             {
                 large_image = string.IsNullOrWhiteSpace(queryInfo.PosterUrl) ? "mpv" : queryInfo.PosterUrl,
                 large_text = string.IsNullOrWhiteSpace(queryInfo.EpisodeName) ? "mpv" : SmartStringTrim(queryInfo.EpisodeName, 64),
             },
-            buttons = queryInfo.AnimeUrl is null ? [] : [new Button { label = "View Anime", url = queryInfo.AnimeUrl }]
+            buttons = string.IsNullOrWhiteSpace(queryInfo.AnimeUrl) ? [] : [new Button { label = "View Anime", url = queryInfo.AnimeUrl }]
         };
     }
 }
