@@ -74,7 +74,7 @@ public class DiscordPipeClient : IDisposable
         }
     }
 
-    public async Task SetPresenceAsync(RichPresence presence, CancellationToken cancelToken)
+    public async Task SetPresenceAsync(RichPresence? presence, CancellationToken cancelToken)
     {
         if (!_isReady)
             return;
@@ -189,13 +189,16 @@ public class DiscordPipeClient : IDisposable
         return str[..str[..(length + 1)].LastIndexOf(' ')] + "...";
     }
 
-    public static RichPresence CreateNewPresence(QueryInfo queryInfo, bool paused, double playbackTime, double timeLeft) =>
-        new()
+    public static RichPresence? CreateNewPresence(QueryInfo queryInfo, bool paused, double playbackTime, double timeLeft)
+    {
+        if (paused)
+            return null;
+        return new RichPresence
         {
             details = SmartStringTrim(queryInfo.AnimeName, 64),
             state =
                 $"{queryInfo.EpisodeType} {queryInfo.EpisodeNumber}{(queryInfo.EpisodeType != "Episode" || queryInfo.EpisodeCount is null ? string.Empty : $" of {queryInfo.EpisodeCount}")}",
-            timestamps = paused ? null : TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
+            timestamps = TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
             assets = new Assets
             {
                 large_image = string.IsNullOrWhiteSpace(queryInfo.PosterUrl) ? "mpv" : queryInfo.PosterUrl,
@@ -203,6 +206,7 @@ public class DiscordPipeClient : IDisposable
             },
             buttons = queryInfo.AnimeUrl is null ? [] : [new Button { label = "View Anime", url = queryInfo.AnimeUrl }]
         };
+    }
 }
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]
@@ -255,4 +259,4 @@ public enum Opcode
 
 [SuppressMessage("ReSharper", "InconsistentNaming")]
 [SuppressMessage("ReSharper", "NotAccessedPositionalProperty.Global")]
-public record PresenceCommand(int pid, RichPresence activity);
+public record PresenceCommand(int pid, RichPresence? activity);
