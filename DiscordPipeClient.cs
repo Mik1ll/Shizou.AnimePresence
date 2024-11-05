@@ -197,9 +197,9 @@ public class DiscordPipeClient : IDisposable
         {
             details = SmartStringTrim(queryInfo.AnimeName, 64),
             state = $"{queryInfo.EpisodeType} {queryInfo.EpisodeNumber}" +
-                queryInfo.EpisodeType != "Episode" || queryInfo.EpisodeCount is null
-                    ? string.Empty
-                    : $" of {queryInfo.EpisodeCount}",
+                    (queryInfo.EpisodeType != "Episode" || queryInfo.EpisodeCount is null
+                        ? string.Empty
+                        : $" of {queryInfo.EpisodeCount}"),
             timestamps = TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
             assets = new Assets
             {
