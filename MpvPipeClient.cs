@@ -72,8 +72,9 @@ public class MpvPipeClient : IDisposable
             if (queryInfo is null)
                 return;
 
+            var speed = (await GetPropertyAsync("speed", cancelToken)).GetDouble();
             var timeLeft = (await GetPropertyAsync("playtime-remaining", cancelToken)).GetDouble();
-            var playbackTime = (await GetPropertyAsync("playback-time", cancelToken)).GetDouble();
+            var playbackTime = (await GetPropertyAsync("playback-time", cancelToken)).GetDouble() / speed;
             var paused = (await GetPropertyAsync("pause", cancelToken)).GetBoolean();
 
             var newPresence = DiscordPipeClient.CreateNewPresence(queryInfo, paused, playbackTime, timeLeft);
