@@ -12,14 +12,12 @@ public class MpvPipeClient : IDisposable
     private readonly Random _random = new();
     private readonly ConcurrentDictionary<int, Channel<MpvPipeResponse>> _responses = new();
     private readonly DiscordPipeClient _discordClient;
-    private readonly bool _allowRestricted;
     private StreamReader? _lineReader;
     private StreamWriter? _lineWriter;
 
-    public MpvPipeClient(string serverPath, DiscordPipeClient discordClient, bool allowRestricted)
+    public MpvPipeClient(string serverPath, DiscordPipeClient discordClient)
     {
         _discordClient = discordClient;
-        _allowRestricted = allowRestricted;
         _pipeClientStream = new NamedPipeClientStream(".", serverPath, PipeDirection.InOut, PipeOptions.Asynchronous);
     }
 
@@ -68,7 +66,7 @@ public class MpvPipeClient : IDisposable
         for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
             var path = await GetPropertyStringAsync("path", cancelToken);
-            var queryInfo = QueryInfo.GetQueryInfo(path, _allowRestricted);
+            var queryInfo = QueryInfo.GetQueryInfo(path);
             if (queryInfo is null)
                 return;
 
@@ -77,7 +75,7 @@ public class MpvPipeClient : IDisposable
             var playbackTime = (await GetPropertyAsync("playback-time", cancelToken)).GetDouble() / speed;
             var paused = (await GetPropertyAsync("pause", cancelToken)).GetBoolean();
 
-            var newPresence = DiscordPipeClient.CreateNewPresence(queryInfo, paused, playbackTime, timeLeft);
+            var newPresence = _discordClient.CreateNewPresence(queryInfo, paused, playbackTime, timeLeft);
             await _discordClient.SetPresenceAsync(newPresence, cancelToken);
         }
     }

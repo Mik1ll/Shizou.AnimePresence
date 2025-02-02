@@ -15,8 +15,13 @@ public class DiscordPipeClient : IDisposable
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private NamedPipeClientStream? _pipeClientStream;
     private bool _isReady;
+    private readonly bool _allowRestricted;
 
-    public DiscordPipeClient(string discordClientId) => _discordClientId = discordClientId;
+    public DiscordPipeClient(string discordClientId, bool allowRestricted)
+    {
+        _discordClientId = discordClientId;
+        _allowRestricted = allowRestricted;
+    }
 
 
     public async Task ReadLoop(CancellationToken cancelToken)
@@ -189,9 +194,9 @@ public class DiscordPipeClient : IDisposable
         return str[..str[..(length + 1)].LastIndexOf(' ')] + "...";
     }
 
-    public static RichPresence? CreateNewPresence(QueryInfo queryInfo, bool paused, double playbackTime, double timeLeft)
+    public RichPresence? CreateNewPresence(QueryInfo queryInfo, bool paused, double playbackTime, double timeLeft)
     {
-        if (paused)
+        if (paused || !_allowRestricted && queryInfo.Restricted)
             return null;
         return new RichPresence
         {

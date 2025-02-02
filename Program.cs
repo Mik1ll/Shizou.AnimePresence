@@ -11,8 +11,8 @@ var allowRestricted = bool.Parse(args[2]);
 try
 {
     var cancelSource = new CancellationTokenSource();
-    using var discordClient = new DiscordPipeClient(discordClientId);
-    using var mpvClient = new MpvPipeClient(socketName, discordClient, allowRestricted);
+    using var discordClient = new DiscordPipeClient(discordClientId, allowRestricted);
+    using var mpvClient = new MpvPipeClient(socketName, discordClient);
     await mpvClient.Connect(cancelSource.Token);
     var tasks = new[] { mpvClient.ReadLoop(cancelSource.Token), mpvClient.QueryLoop(cancelSource.Token), discordClient.ReadLoop(cancelSource.Token) };
 

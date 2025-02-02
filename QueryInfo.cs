@@ -8,7 +8,7 @@ public class QueryInfo
     {
     }
 
-    public static QueryInfo? GetQueryInfo(string path, bool allowRestricted)
+    public static QueryInfo? GetQueryInfo(string path)
     {
         if (!Uri.TryCreate(path, UriKind.Absolute, out var uri) || !new[] { Uri.UriSchemeHttp, Uri.UriSchemeHttps }.Contains(uri.Scheme))
         {
@@ -24,21 +24,6 @@ public class QueryInfo
         }
 
         var restrictedSpecified = bool.TryParse(fileQuery.Get("restricted"), out var restricted);
-
-        if (!allowRestricted)
-        {
-            if (!restrictedSpecified)
-            {
-                Console.Error.WriteLine("Restricted is a required parameter when restricted files are disallowed");
-                return null;
-            }
-
-            if (restricted)
-            {
-                Console.Error.WriteLine("Not allowing restricted file");
-                return null;
-            }
-        }
 
         if ((fileQuery.Get("epNo") ?? fileQuery.Get("episodeNumber")) is not { } episodeNumber)
         {
@@ -83,7 +68,8 @@ public class QueryInfo
             EpisodeType = episodeType,
             EpisodeCount = fileQuery.Get("epCount") ?? fileQuery.Get("episodeCount"),
             AnimeUrl = fileQuery.Get("animeUrl") ?? (animeId is null ? null : $"https://anidb.net/anime/{animeId}"),
-            PosterUrl = posterUrl
+            PosterUrl = posterUrl,
+            Restricted = !restrictedSpecified || restricted
         };
     }
 
@@ -95,4 +81,5 @@ public class QueryInfo
     public string? EpisodeCount { get; init; }
     public string? AnimeUrl { get; init; }
     public string? PosterUrl { get; init; }
+    public required bool Restricted { get; init; }
 }
