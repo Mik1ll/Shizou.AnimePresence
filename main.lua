@@ -38,7 +38,7 @@ local function start()
 	presence_command, err = mp.command_native_async({
 		name = "subprocess",
 		playback_only = false,
-		args = { exePath, discord_client_id_str, socket_name, allow_restricted },
+		args = { exePath, discord_client_id_str, allow_restricted, "mpv", socket_name },
 	})
 	if err ~= nil then
         mp.msg.error("Subprocess failed to start: " .. err)
