@@ -13,13 +13,21 @@ var allowRestrictedArg = new Argument<bool>("allow-restricted", "Whether to show
 
 var socketNameArg = new Argument<string>("socket-name", "The name of the ipc socket");
 
-var mpvCommand = new Command("mpv", "Run with mpv external player");
 
 rootCommand.AddArgument(discordClientIdArg);
 rootCommand.AddArgument(allowRestrictedArg);
+
+var mpvCommand = new Command("mpv", "Run with mpv external player");
 mpvCommand.AddArgument(socketNameArg);
 rootCommand.AddCommand(mpvCommand);
 mpvCommand.SetHandler(HandleMpv, discordClientIdArg, allowRestrictedArg, socketNameArg);
+
+var vlcCommand = new Command("vlc", "Run with vlc external player");
+
+var portArg = new Argument<int>("port", "The port number used for the http server");
+vlcCommand.AddArgument(portArg);
+rootCommand.AddCommand(vlcCommand);
+vlcCommand.SetHandler(HandleVlc, discordClientIdArg, allowRestrictedArg, portArg);
 
 await rootCommand.InvokeAsync(args);
 
@@ -32,6 +40,16 @@ async Task HandleMpv(string discordClientId, bool allowRestricted, string socket
     using var mpvClient = new MpvPipeClient(socketName, discordClient);
     await mpvClient.Connect(cancelSource.Token);
     var tasks = new[] { mpvClient.ReadLoop(cancelSource.Token), mpvClient.QueryLoop(cancelSource.Token), discordClient.ReadLoop(cancelSource.Token) };
+    await Run(tasks, cancelSource);
+}
+
+
+async Task HandleVlc(string discordClientId, bool allowRestricted, int port)
+{
+    var cancelSource = new CancellationTokenSource();
+    using var discordClient = new DiscordPipeClient(discordClientId, allowRestricted);
+    using var vlcCLient = new VlcHttpClient(port, discordClient);
+    var tasks = new[] { vlcCLient.QueryLoop(cancelSource.Token), discordClient.ReadLoop(cancelSource.Token) };
     await Run(tasks, cancelSource);
 }
 

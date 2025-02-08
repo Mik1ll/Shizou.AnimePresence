@@ -8,7 +8,7 @@ public class QueryInfo
     {
     }
 
-    public static QueryInfo? GetQueryInfo(string path)
+    public static QueryInfo? GetQueryInfo(string? path)
     {
         if (!Uri.TryCreate(path, UriKind.Absolute, out var uri) || !new[] { Uri.UriSchemeHttp, Uri.UriSchemeHttps }.Contains(uri.Scheme))
         {

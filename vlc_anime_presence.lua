@@ -2,7 +2,13 @@
 local httprequests = require("httprequests")
 
 local function callback_status(data, query)
-    return dkjson.encode(httprequests.getstatus(true))
+    local status = {}
+    local item = vlc.player.item()
+    if item then
+        status.uri = item.uri() 
+    end
+    
+    return dkjson.encode(status)
 end
 
 local function sleep(sec)
@@ -27,10 +33,8 @@ vlc.config.set("http-port", port)
 vlc.msg.info("host:" .. host)
 vlc.msg.info("port:" .. port)
 
-local password = vlc.var.inherit(nil, "http-password") or "password"
-
 local h = vlc.httpd()
-local statush = h:file("/status.json", "application/json", nil, password, callback_status, nil)
+local statush = h:file("/status.json", "application/json", nil, "password", callback_status, nil)
 
 vlc.config.set("http-host", oldhost)
 vlc.config.set("http-port", oldport)
