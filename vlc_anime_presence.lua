@@ -1,4 +1,4 @@
-﻿local dkjson = require("dkjson")
+local dkjson = require("dkjson")
 
 local function callback_status(data, query)
     local status = {}
@@ -37,7 +37,7 @@ vlc.msg.info("host:" .. host)
 vlc.msg.info("port:" .. port)
 
 local h = vlc.httpd()
-local statush = h:file("/status.json", "application/json", nil, "password", callback_status, vlc)
+local statush = h:file("/status.json", "application/json", nil, "password", callback_status, nil)
 
 vlc.config.set("http-host", oldhost)
 vlc.config.set("http-port", oldport)
@@ -45,10 +45,7 @@ vlc.config.set("http-port", oldport)
 local function find_in_datadir(subpath)
     local list = vlc.config.datadir_list(subpath)
     for _, l in ipairs(list) do
-        local s = vlc.net.stat(l)
-        if s then
-            return l
-        end
+        if vlc.net.stat(l) then return l end
     end
     return nil
 end
@@ -60,4 +57,4 @@ if not exePath then
     return
 end
 vlc.msg.info("exePath:" .. exePath)
-os.execute('"' .. exePath .. '"' .. discord_client_id_str .. ' ' .. allow_restricted .. ' vlc ' .. port)
+os.execute('"' .. exePath .. '" ' .. discord_client_id_str .. ' ' .. allow_restricted .. ' vlc ' .. port)
