@@ -2,31 +2,28 @@
 using Shizou.AnimePresence;
 using Command = System.CommandLine.Command;
 
-var rootCommand = new RootCommand()
-{
-    TreatUnmatchedTokensAsErrors = true,
-};
-
 var discordClientIdArg = new Argument<string>("discord-client-id", "Discord API client ID");
 
 var allowRestrictedArg = new Argument<bool>("allow-restricted", "Whether to show presence for restricted series (hentai), will never show images");
 
 var socketNameArg = new Argument<string>("socket-name", "The name of the ipc socket");
 
+var portArg = new Argument<int>("port", "The port number used for the http server");
 
+var rootCommand = new RootCommand { TreatUnmatchedTokensAsErrors = true };
 rootCommand.AddArgument(discordClientIdArg);
 rootCommand.AddArgument(allowRestrictedArg);
 
 var mpvCommand = new Command("mpv", "Run with mpv external player");
 mpvCommand.AddArgument(socketNameArg);
 rootCommand.AddCommand(mpvCommand);
-mpvCommand.SetHandler(HandleMpv, discordClientIdArg, allowRestrictedArg, socketNameArg);
 
 var vlcCommand = new Command("vlc", "Run with vlc external player");
-
-var portArg = new Argument<int>("port", "The port number used for the http server");
 vlcCommand.AddArgument(portArg);
 rootCommand.AddCommand(vlcCommand);
+
+mpvCommand.SetHandler(HandleMpv, discordClientIdArg, allowRestrictedArg, socketNameArg);
+
 vlcCommand.SetHandler(HandleVlc, discordClientIdArg, allowRestrictedArg, portArg);
 
 await rootCommand.InvokeAsync(args);
