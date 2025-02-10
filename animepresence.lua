@@ -18,11 +18,6 @@ local function sleep(sec)
     vlc.misc.mwait(vlc.misc.mdate() + sec * 1000000)
 end
 
-
-local allow_restricted = "false"
-
-local discord_client_id_str = "1230418743734042694"
-
 sleep(10)
 
 math.randomseed(os.time())
@@ -62,16 +57,16 @@ if not exePath then
 end
 vlc.msg.info("exePath: " .. exePath)
 if get_OS() == "win" then
-    local vbspath = find_in_datadir("intf/start_presence.vbs")
+    local vbspath = find_in_datadir("intf/start_hidden.vbs")
     if not vbspath then
         vlc.msg.err("Unable to find " .. vbspath .. " in datadirs")
         return
     end
     vbspath = vbspath:gsub('\\', '/')
     exePath = exePath:gsub('\\', '/')
-    local vbs_start = 'WScript.exe "' .. vbspath .. '" "' .. exePath .. '" ' .. discord_client_id_str .. ' ' .. allow_restricted .. ' ' .. port
+    local vbs_start = 'WScript.exe "' .. vbspath .. '" "' .. exePath .. '" ' .. port
     vlc.msg.info("Starting vbs presence: " .. vbs_start)
     os.execute(vbs_start)
 else
-    os.execute('"' .. exePath .. '" ' .. discord_client_id_str .. ' ' .. allow_restricted .. ' vlc ' .. port)
+    os.execute('"' .. exePath .. '" vlc ' .. port)
 end

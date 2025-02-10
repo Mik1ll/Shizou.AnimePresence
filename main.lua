@@ -1,9 +1,6 @@
 ﻿local mp = require("mp")
 local utils = require("mp.utils")
 
-local allow_restricted = "false"
-
-local discord_client_id_str = "1230418743734042694"
 local pid = utils.getpid()
 local socket_name = "/tmp/mpv-socket" .. '-' .. pid
 local toggle_keybind = "ctrl+d"
@@ -38,7 +35,7 @@ local function start()
 	presence_command, err = mp.command_native_async({
 		name = "subprocess",
 		playback_only = false,
-		args = { exePath, discord_client_id_str, allow_restricted, "mpv", socket_name },
+		args = { exePath, "mpv", socket_name },
 	})
 	if err ~= nil then
         mp.msg.error("Subprocess failed to start: " .. err)
