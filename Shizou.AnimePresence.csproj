@@ -17,7 +17,7 @@
         <None Update="main.lua">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
-        <None Update="vlc_anime_presence.lua">
+        <None Update="animepresence.lua">
           <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Update="start_presence.vbs">
