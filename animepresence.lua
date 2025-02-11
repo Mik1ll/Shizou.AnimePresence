@@ -37,36 +37,22 @@ local statush = h:file("/status.json", "application/json", nil, "password", call
 vlc.config.set("http-host", oldhost)
 vlc.config.set("http-port", oldport)
 
-local function find_in_datadir(subpath)
-    local list = vlc.config.datadir_list(subpath)
-    for _, l in ipairs(list) do
-        if vlc.net.stat(l) then return l end
-    end
-    return nil
-end
-
 local function get_OS()
     return package.config:sub(1, 1) == "\\" and "win" or "unix"
 end
 
-local subpath = "intf/Shizou.AnimePresence"
-local exePath = find_in_datadir(subpath) or find_in_datadir(subpath .. ".exe")
-if not exePath then
-    vlc.msg.err("Unable to find " .. subpath .. " in datadirs")
-    return
+local directory = select(1, debug.getinfo(1,'S').source:match([=[^@(.*[/\])]=]))
+if directory == nil then
+   error("Unable to find directory from debug info") 
 end
-vlc.msg.info("exePath: " .. exePath)
+vlc.msg.info("directory: " .. directory)
+
+local cmd = ""
 if get_OS() == "win" then
-    local vbspath = find_in_datadir("intf/start_hidden.vbs")
-    if not vbspath then
-        vlc.msg.err("Unable to find " .. vbspath .. " in datadirs")
-        return
-    end
-    vbspath = vbspath:gsub('\\', '/')
-    exePath = exePath:gsub('\\', '/')
-    local vbs_start = 'WScript.exe "' .. vbspath .. '" "' .. exePath .. '" ' .. port
-    vlc.msg.info("Starting vbs presence: " .. vbs_start)
-    os.execute(vbs_start)
+    cmd = 'WScript.exe "' .. directory .. 'start_hidden.vbs" "' .. directory .. 'Shizou.AnimePresence.exe" ' .. port
 else
-    os.execute('"' .. exePath .. '" vlc ' .. port)
+    cmd = "'" .. directory .. "Shizou.AnimePresence' vlc " .. port 
 end
+
+vlc.msg.info("starting presence: " .. cmd)
+os.execute(cmd)
