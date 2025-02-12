@@ -49,7 +49,7 @@ vlc.msg.info("directory: " .. directory)
 
 local cmd = ""
 if get_OS() == "win" then
-    cmd = 'WScript.exe "' .. directory .. 'start_hidden.vbs" "' .. directory .. 'Shizou.AnimePresence.exe" ' .. port
+    cmd = 'WScript.exe "' .. directory .. 'start_hidden.vbs" "' .. directory .. 'Shizou.AnimePresence.exe" vlc ' .. port
 else
     cmd = "'" .. directory .. "Shizou.AnimePresence' vlc " .. port 
 end
