@@ -14,16 +14,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <None Update="main.lua">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </None>
-        <None Update="animepresence.lua">
+        <None Update="vlcpresence.lua">
           <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Update="start_hidden.vbs">
           <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
         <None Update="Shizou.AnimePresence.jsonc">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="mpvpresence.lua">
           <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
