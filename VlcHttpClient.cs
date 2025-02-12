@@ -16,15 +16,17 @@ public class VlcHttpClient : IDisposable
             BaseAddress = new Uri($"http://127.234.133.79:{port}"),
             Timeout = TimeSpan.FromSeconds(2),
             DefaultRequestHeaders = { Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(":password"u8)) },
+            DefaultRequestVersion = new Version(1, 0),
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
         };
     }
 
     public async Task QueryLoop(CancellationToken cancelToken)
     {
         await Task.Yield();
-        for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
+        for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(3), cancelToken))
         {
-            var statusResp = await _httpClient.GetAsync("status.json", cancelToken);
+            using var statusResp = await _httpClient.GetAsync("status.json", cancelToken);
             statusResp.EnsureSuccessStatusCode();
             var statusJson = await statusResp.Content.ReadAsStringAsync(cancelToken);
             var json = JsonDocument.Parse(statusJson);

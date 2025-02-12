@@ -9,9 +9,12 @@ local function callback_status(data, query)
         status.paused = vlc.playlist.status() ~= "playing"
         local duration = item:duration()
         if duration > 0 then status.duration = duration end
-        status.time = vlc.var.get(vlc.object.input(), "time") / 1000000
+        local time = vlc.var.get(vlc.object.input(), "time")
+        if time > 0 then
+            status.time = time / 1000000
+        end
     end
-    return dkjson.encode(status)
+    return next(status) == nil and '{}' or dkjson.encode(status)
 end
 
 local function sleep(sec)
@@ -33,8 +36,8 @@ vlc.msg.info("host: " .. host .. ':' .. port)
 local h = vlc.httpd()
 local statush = h:file("/status.json", "application/json", nil, "password", callback_status, nil)
 
-vlc.config.set("http-host", oldhost)
-vlc.config.set("http-port", oldport)
+-- vlc.config.set("http-host", oldhost)
+-- vlc.config.set("http-port", oldport)
 
 local function get_OS()
     return package.config:sub(1, 1) == "\\" and "win" or "unix"
