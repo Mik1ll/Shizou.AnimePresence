@@ -28,8 +28,7 @@ local port = math.random(1024, 65535)
 local oldport = vlc.config.get("http-port")
 vlc.config.set("http-port", port)
 
-vlc.msg.info("host: " .. host)
-vlc.msg.info("port: " .. port)
+vlc.msg.info("host: " .. host .. ':' .. port)
 
 local h = vlc.httpd()
 local statush = h:file("/status.json", "application/json", nil, "password", callback_status, nil)

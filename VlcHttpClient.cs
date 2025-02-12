@@ -1,5 +1,4 @@
 ﻿using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 
 namespace Shizou.AnimePresence;
@@ -7,17 +6,17 @@ namespace Shizou.AnimePresence;
 public class VlcHttpClient : IDisposable
 {
     private readonly DiscordPipeClient _discordClient;
-
-    private readonly HttpClient HttpClient;
+    private readonly HttpClient _httpClient;
 
     public VlcHttpClient(int port, DiscordPipeClient discordClient)
     {
         _discordClient = discordClient;
-        HttpClient = new HttpClient
+        _httpClient = new HttpClient
         {
             BaseAddress = new Uri($"http://127.234.133.79:{port}"),
+            Timeout = TimeSpan.FromSeconds(2),
+            DefaultRequestHeaders = { Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(":password"u8)) },
         };
-        HttpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(":password"u8.ToArray()));
     }
 
     public async Task QueryLoop(CancellationToken cancelToken)
@@ -25,7 +24,7 @@ public class VlcHttpClient : IDisposable
         await Task.Yield();
         for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
-            var statusResp = await HttpClient.GetAsync("status.json", cancelToken);
+            var statusResp = await _httpClient.GetAsync("status.json", cancelToken);
             statusResp.EnsureSuccessStatusCode();
             var statusJson = await statusResp.Content.ReadAsStringAsync(cancelToken);
             var json = JsonDocument.Parse(statusJson);
@@ -33,7 +32,6 @@ public class VlcHttpClient : IDisposable
             var queryInfo = QueryInfo.GetQueryInfo(uri);
             if (queryInfo is null)
                 return;
-            //
             var speed = json.RootElement.GetProperty("speed").GetDouble();
             var duration = json.RootElement.GetProperty("duration").GetDouble();
             var playbackTime = json.RootElement.GetProperty("time").GetDouble() / speed;
@@ -47,6 +45,6 @@ public class VlcHttpClient : IDisposable
 
     public void Dispose()
     {
-        HttpClient.Dispose();
+        _httpClient.Dispose();
     }
 }
