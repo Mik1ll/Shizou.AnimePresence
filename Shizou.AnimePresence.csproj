@@ -31,10 +31,6 @@
         </None>
     </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
-    </ItemGroup>
-
     <Target Name="GetGitAssemblyVersion" BeforeTargets="GetAssemblyVersion">
         <PropertyGroup Condition="$([System.OperatingSystem]::IsWindows())">
             <DevNull>NUL</DevNull>
