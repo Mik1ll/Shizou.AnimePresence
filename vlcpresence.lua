@@ -21,40 +21,32 @@ local function sleep(sec)
     vlc.misc.mwait(vlc.misc.mdate() + sec * 1000000)
 end
 
-sleep(10)
-
-math.randomseed(os.time())
 local oldhost = vlc.config.get("http-host")
-local host = "127.234.133.79"
-vlc.config.set("http-host", host)
-local port = math.random(1024, 65535)
 local oldport = vlc.config.get("http-port")
+local host = "127.234.133.79"
+math.randomseed(os.time())
+local port = math.random(1024, 65535)
+
+vlc.msg.info("status: http://" .. host .. ':' .. port .. '/status.json')
+
+vlc.config.set("http-host", host)
 vlc.config.set("http-port", port)
-
-vlc.msg.info("host: " .. host .. ':' .. port)
-
 local h = vlc.httpd()
-local statush = h:file("/status.json", "application/json", nil, "password", callback_status, nil)
+local fileudata = h:file("/status.json", "application/json", nil, "password", callback_status, nil)
+vlc.config.set("http-host", oldhost)
+vlc.config.set("http-port", oldport)
 
--- vlc.config.set("http-host", oldhost)
--- vlc.config.set("http-port", oldport)
+sleep(5)
 
-local function get_OS()
-    return package.config:sub(1, 1) == "\\" and "win" or "unix"
-end
-
-local directory = select(1, debug.getinfo(1,'S').source:match([=[^@(.*[/\])]=]))
+local directory = select(1, debug.getinfo(1, 'S').source:match([=[^@(.*[/\])]=]))
 if directory == nil then
-   error("Unable to find directory from debug info") 
+    vlc.msg.err("Unable to find directory from debug info")
 end
 vlc.msg.info("directory: " .. directory)
 
 local cmd = ""
-if get_OS() == "win" then
-    cmd = 'WScript.exe "' .. directory .. 'start_hidden.vbs" "' .. directory .. 'Shizou.AnimePresence.exe" vlc ' .. port
-else
-    cmd = "'" .. directory .. "Shizou.AnimePresence' vlc " .. port 
-end
+-- cmd = "'" .. directory .. "Shizou.AnimePresence' vlc " .. port
+cmd = 'WScript.exe "' .. directory .. 'start_hidden.vbs" "' .. directory .. 'Shizou.AnimePresence.exe" vlc ' .. port
 
 vlc.msg.info("starting presence: " .. cmd)
 os.execute(cmd)
