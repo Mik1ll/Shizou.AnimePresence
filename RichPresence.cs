@@ -58,6 +58,12 @@ public record TimeStamps
         start = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(played)).ToUnixTimeSeconds(),
         end = (DateTimeOffset.UtcNow + TimeSpan.FromSeconds(remaining)).ToUnixTimeSeconds()
     };
+
+    public static TimeStamps FromDurationTimeSpeed(double time, double speed, double? duration) => new()
+    {
+        start = (DateTimeOffset.UtcNow - TimeSpan.FromSeconds(time / speed)).ToUnixTimeSeconds(),
+        end = duration is null ? null : (DateTimeOffset.UtcNow + TimeSpan.FromSeconds((duration.Value - time) / speed)).ToUnixTimeSeconds()
+    };
 }
 
 public record RichPresence

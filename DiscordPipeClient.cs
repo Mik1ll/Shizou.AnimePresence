@@ -194,7 +194,7 @@ public class DiscordPipeClient : IDisposable
         return str[..str[..(length + 1)].LastIndexOf(' ')] + "...";
     }
 
-    public RichPresence? CreateNewPresence(QueryInfo queryInfo, bool paused, double playbackTime, double timeLeft)
+    public RichPresence? CreateNewPresence(QueryInfo queryInfo, bool paused, TimeStamps timestamps)
     {
         if (paused || !_allowRestricted && queryInfo.Restricted)
             return null;
@@ -205,7 +205,7 @@ public class DiscordPipeClient : IDisposable
                     (queryInfo.EpisodeType != "Episode" || queryInfo.EpisodeCount is null
                         ? string.Empty
                         : $" of {queryInfo.EpisodeCount}"),
-            timestamps = TimeStamps.FromPlaybackPosition(playbackTime, timeLeft),
+            timestamps = timestamps,
             assets = new Assets
             {
                 large_image = string.IsNullOrWhiteSpace(queryInfo.PosterUrl) ? "mpv" : queryInfo.PosterUrl,

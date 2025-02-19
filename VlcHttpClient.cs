@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Shizou.AnimePresence;
 
-public class VlcHttpClient : IDisposable
+public sealed class VlcHttpClient : IDisposable
 {
     private readonly DiscordPipeClient _discordClient;
     private readonly HttpClient _httpClient;
@@ -24,23 +24,24 @@ public class VlcHttpClient : IDisposable
     public async Task QueryLoop(CancellationToken cancelToken)
     {
         await Task.Yield();
-        for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(3), cancelToken))
+        for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
             using var statusResp = await _httpClient.GetAsync("status.json", cancelToken);
             statusResp.EnsureSuccessStatusCode();
             var statusJson = await statusResp.Content.ReadAsStringAsync(cancelToken);
             var json = JsonDocument.Parse(statusJson);
-            var uri = json.RootElement.GetProperty("uri").GetString();
+            if (!json.RootElement.TryGetProperty("uri", out var uriElem)) continue;
+            var uri = uriElem.GetString();
             var queryInfo = QueryInfo.GetQueryInfo(uri);
             if (queryInfo is null)
-                return;
-            var speed = json.RootElement.GetProperty("speed").GetDouble();
-            var duration = json.RootElement.GetProperty("duration").GetDouble();
-            var playbackTime = json.RootElement.GetProperty("time").GetDouble() / speed;
-            var timeLeft = (duration - playbackTime) / speed;
+                continue;
+            var speed = json.RootElement.TryGetProperty("speed", out var speedElem) ? speedElem.GetDouble() : 1;
+            var duration = json.RootElement.TryGetProperty("duration", out var durationElem) ? durationElem.GetDouble() : (double?)null;
+            var playbackTime = json.RootElement.GetProperty("time").GetDouble();
+            var timeStamps = TimeStamps.FromDurationTimeSpeed(playbackTime, speed, duration);
             var paused = json.RootElement.GetProperty("paused").GetBoolean();
 
-            var newPresence = _discordClient.CreateNewPresence(queryInfo, paused, playbackTime, timeLeft);
+            var newPresence = _discordClient.CreateNewPresence(queryInfo, paused, timeStamps);
             await _discordClient.SetPresenceAsync(newPresence, cancelToken);
         }
     }
