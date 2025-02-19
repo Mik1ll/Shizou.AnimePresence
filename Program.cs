@@ -60,5 +60,5 @@ public static partial class Program
 public record Settings(string DiscordClientId, bool AllowRestricted);
 
 [JsonSerializable(typeof(Settings))]
-[JsonSourceGenerationOptions(ReadCommentHandling = JsonCommentHandling.Skip, GenerationMode = JsonSourceGenerationMode.Serialization)]
+[JsonSourceGenerationOptions(ReadCommentHandling = JsonCommentHandling.Skip, GenerationMode = JsonSourceGenerationMode.Metadata)]
 public partial class MyContext : JsonSerializerContext;
