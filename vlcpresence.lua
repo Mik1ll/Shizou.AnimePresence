@@ -45,8 +45,10 @@ end
 vlc.msg.info("directory: " .. directory)
 
 local cmd = ""
--- cmd = "'" .. directory .. "Shizou.AnimePresence' vlc " .. port
-cmd = 'WScript.exe "' .. directory .. 'start_hidden.vbs" "' .. directory .. 'Shizou.AnimePresence.exe" vlc ' .. port
-
+if vlc.win == nil then
+    cmd = "'" .. directory .. "Shizou.AnimePresence' vlc " .. port
+else
+    cmd = 'WScript.exe "' .. directory .. 'start_hidden.vbs" "' .. directory .. 'Shizou.AnimePresence.exe" vlc ' .. port
+end
 vlc.msg.info("starting presence: " .. cmd)
 os.execute(cmd)
