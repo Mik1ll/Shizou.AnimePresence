@@ -23,7 +23,7 @@ public sealed class VlcHttpClient : IDisposable
 
     public async Task QueryLoop(CancellationToken cancelToken)
     {
-        await Task.Yield();
+        await Task.Delay(TimeSpan.FromSeconds(2), cancelToken);
         for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
             using var statusResp = await _httpClient.GetAsync("status.json", cancelToken);

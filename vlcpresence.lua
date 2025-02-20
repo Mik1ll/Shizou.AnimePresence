@@ -36,7 +36,7 @@ local fileudata = h:file("/status.json", "application/json", nil, "password", ca
 vlc.config.set("http-host", oldhost)
 vlc.config.set("http-port", oldport)
 
-sleep(2)
+-- sleep(2)
 
 local directory = select(1, debug.getinfo(1, 'S').source:match([=[^@(.*[/\])]=]))
 if directory == nil then
