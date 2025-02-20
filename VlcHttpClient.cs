@@ -30,11 +30,14 @@ public sealed class VlcHttpClient : IDisposable
             statusResp.EnsureSuccessStatusCode();
             var statusJson = await statusResp.Content.ReadAsStringAsync(cancelToken);
             var json = JsonDocument.Parse(statusJson);
-            if (!json.RootElement.TryGetProperty("uri", out var uriElem)) continue;
-            var uri = uriElem.GetString();
+            var uri = json.RootElement.TryGetProperty("uri", out var uriElem) ? uriElem.GetString() : null;
             var queryInfo = QueryInfo.GetQueryInfo(uri);
             if (queryInfo is null)
+            {
+                await _discordClient.SetPresenceAsync(null, cancelToken);
                 continue;
+            }
+
             var speed = json.RootElement.TryGetProperty("speed", out var speedElem) ? speedElem.GetDouble() : 1;
             var duration = json.RootElement.TryGetProperty("duration", out var durationElem) ? durationElem.GetDouble() : (double?)null;
             var playbackTime = json.RootElement.GetProperty("time").GetDouble();
