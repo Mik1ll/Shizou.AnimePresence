@@ -47,16 +47,12 @@ public class MpvPipeClient : IDisposable
             if (response.@event is not null && response.@event == "shutdown")
                 break;
 
-            if (response is { @event: null, request_id: not null })
-            {
-                _responses.TryGetValue(response.request_id.Value, out var channel);
-                if (channel is not null)
-                {
-                    await channel.Writer.WriteAsync(response, cancelToken);
-                    cancelToken.ThrowIfCancellationRequested();
-                    channel.Writer.Complete();
-                }
-            }
+            if (response is not { @event: null, request_id: not null }) continue;
+            _responses.TryGetValue(response.request_id.Value, out var channel);
+            if (channel is null) continue;
+            await channel.Writer.WriteAsync(response, cancelToken);
+            cancelToken.ThrowIfCancellationRequested();
+            channel.Writer.Complete();
         }
     }
 
@@ -68,7 +64,10 @@ public class MpvPipeClient : IDisposable
             var path = await GetPropertyStringAsync("path", cancelToken);
             var queryInfo = QueryInfo.GetQueryInfo(path);
             if (queryInfo is null)
+            {
+                await _discordClient.SetPresenceAsync(null, cancelToken);
                 return;
+            }
 
             var speed = (await GetPropertyAsync("speed", cancelToken)).GetDouble();
             var timeLeft = (await GetPropertyAsync("playtime-remaining", cancelToken)).GetDouble();
@@ -137,16 +136,14 @@ public class MpvPipeClient : IDisposable
 
 // ReSharper disable InconsistentNaming
 public record MpvPipeRequest(string[] command, int request_id);
-
 // ReSharper restore InconsistantNaming
 
-[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Serialization)]
 [JsonSerializable(typeof(MpvPipeRequest))]
 internal partial class RequestContext : JsonSerializerContext;
 
 // ReSharper disable InconsistentNaming
 public record MpvPipeResponse(string? error, JsonElement data, int? request_id, string? @event);
-
 // ReSharper restore InconsistantNaming
 
 [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
