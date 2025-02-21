@@ -19,8 +19,8 @@ try
         case "mpv":
         {
             using var mpvClient = new MpvPipeClient(args[1], discordClient);
-            tasks = [discordClient.ReadLoop(cancelSource.Token), mpvClient.ReadLoop(cancelSource.Token), mpvClient.QueryLoop(cancelSource.Token)];
             await mpvClient.Connect(cancelSource.Token);
+            tasks = [discordClient.ReadLoop(cancelSource.Token), mpvClient.ReadLoop(cancelSource.Token), mpvClient.QueryLoop(cancelSource.Token)];
             await Run(tasks, cancelSource);
             break;
         }
