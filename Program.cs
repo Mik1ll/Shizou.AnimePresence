@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Shizou.AnimePresence;
 
 await using var settingsStream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Shizou.AnimePresence.jsonc"));
-var settings = await JsonSerializer.DeserializeAsync(settingsStream, MyContext.Default.Settings) ??
+var settings = await JsonSerializer.DeserializeAsync(settingsStream, SettingsContext.Default.Settings) ??
                throw new JsonException("Couldn't deserialize settings");
 
 if (args.Length != 2)
@@ -52,13 +52,8 @@ async Task Run(Task[] tasks, CancellationTokenSource cancellationTokenSource)
     await Task.WhenAll(tasks);
 }
 
-public static partial class Program
-{
-    public const string AppId = "07a58b50-5109-5aa3-abbc-782fed0df04f";
-}
-
-public record Settings(string DiscordClientId, bool AllowRestricted);
+internal record Settings(string DiscordClientId, bool AllowRestricted);
 
 [JsonSerializable(typeof(Settings))]
-[JsonSourceGenerationOptions(ReadCommentHandling = JsonCommentHandling.Skip, GenerationMode = JsonSourceGenerationMode.Metadata)]
-public partial class MyContext : JsonSerializerContext;
+[JsonSourceGenerationOptions(ReadCommentHandling = JsonCommentHandling.Skip)]
+internal partial class SettingsContext : JsonSerializerContext;

@@ -43,7 +43,7 @@ public class MpvPipeClient : IDisposable
             cancelToken.ThrowIfCancellationRequested();
             if (string.IsNullOrEmpty(line))
                 continue;
-            var response = JsonSerializer.Deserialize(line, ResponseContext.Default.MpvPipeResponse)!;
+            var response = JsonSerializer.Deserialize(line, MpvContext.Default.MpvPipeResponse)!;
             if (response.@event is not null && response.@event == "shutdown")
                 break;
 
@@ -114,7 +114,7 @@ public class MpvPipeClient : IDisposable
 
         async Task SendRequest()
         {
-            var requestJson = JsonSerializer.Serialize(request, RequestContext.Default.MpvPipeRequest);
+            var requestJson = JsonSerializer.Serialize(request, MpvContext.Default.MpvPipeRequest);
             await _lineWriter.WriteLineAsync(requestJson.ToCharArray(), cancelToken);
             cancelToken.ThrowIfCancellationRequested();
         }
@@ -136,16 +136,9 @@ public class MpvPipeClient : IDisposable
 
 // ReSharper disable InconsistentNaming
 public record MpvPipeRequest(string[] command, int request_id);
-// ReSharper restore InconsistantNaming
-
-[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Serialization)]
-[JsonSerializable(typeof(MpvPipeRequest))]
-internal partial class RequestContext : JsonSerializerContext;
-
-// ReSharper disable InconsistentNaming
 public record MpvPipeResponse(string? error, JsonElement data, int? request_id, string? @event);
 // ReSharper restore InconsistantNaming
 
-[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSerializable(typeof(MpvPipeRequest))]
 [JsonSerializable(typeof(MpvPipeResponse))]
-internal partial class ResponseContext : JsonSerializerContext;
+internal partial class MpvContext : JsonSerializerContext;

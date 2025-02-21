@@ -17,7 +17,7 @@ public class QueryInfo
         }
 
         var fileQuery = HttpUtility.ParseQueryString(uri.Query);
-        if (!string.Equals(fileQuery.Get("appId"), Program.AppId, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(fileQuery.Get("appId"), "07a58b50-5109-5aa3-abbc-782fed0df04f", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine("The app id is not present or does not match");
             return null;
@@ -73,6 +73,7 @@ public class QueryInfo
         };
     }
 
+    // ReSharper disable once UnusedAutoPropertyAccessor.Global
     public string? AnimeId { get; init; }
     public required string AnimeName { get; init; }
     public required string EpisodeNumber { get; init; }
