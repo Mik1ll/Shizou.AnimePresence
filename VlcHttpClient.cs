@@ -11,10 +11,10 @@ public sealed class VlcHttpClient : IDisposable
     public VlcHttpClient(int port, DiscordPipeClient discordClient)
     {
         _discordClient = discordClient;
-        _httpClient = new HttpClient
+        _httpClient = new HttpClient(new SocketsHttpHandler {PooledConnectionLifetime = TimeSpan.Zero})
         {
             BaseAddress = new Uri($"http://127.234.133.79:{port}"),
-            Timeout = TimeSpan.FromSeconds(2),
+            Timeout = TimeSpan.FromSeconds(1),
             DefaultRequestHeaders = { Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(":password"u8)) },
             DefaultRequestVersion = new Version(1, 0),
             DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact,
@@ -23,10 +23,22 @@ public sealed class VlcHttpClient : IDisposable
 
     public async Task QueryLoop(CancellationToken cancelToken)
     {
-        await Task.Delay(TimeSpan.FromSeconds(2), cancelToken);
+        // Try to connect
+        for (var i = 0; i < 10; ++i)
+            try
+            {
+                if ((await _httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, "status"),
+                        HttpCompletionOption.ResponseHeadersRead, cancelToken)).IsSuccessStatusCode)
+                    break;
+                await Task.Delay(TimeSpan.FromSeconds(1), cancelToken);
+            }
+            catch (HttpRequestException)
+            {
+            }
+
         for (; !cancelToken.IsCancellationRequested; await Task.Delay(TimeSpan.FromSeconds(1), cancelToken))
         {
-            using var statusResp = await _httpClient.GetAsync("status.json", cancelToken);
+            using var statusResp = await _httpClient.GetAsync("status", cancelToken);
             statusResp.EnsureSuccessStatusCode();
             var statusJson = await statusResp.Content.ReadAsStringAsync(cancelToken);
             var json = JsonDocument.Parse(statusJson);
