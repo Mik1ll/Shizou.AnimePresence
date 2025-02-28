@@ -55,9 +55,8 @@ vlc.config.set("http-port", port)
 -- Assign global to prevent garbage collection
 _G.httpd = vlc.httpd()
 _G.file_handler = httpd:handler("/status", nil, "password", status_callback, nil)
-
-vlc.config.set("http-host", oldhost)
-vlc.config.set("http-port", oldport)
+if oldhost then vlc.config.set("http-host", oldhost) end
+if oldport then vlc.config.set("http-port", oldport) end
 
 vlc.msg.info("Status: http://" .. host .. ':' .. port .. '/status')
 
