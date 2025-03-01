@@ -37,9 +37,9 @@ try
 }
 catch (AggregateException ae)
 {
-    ae.Handle(ex => ex is OperationCanceledException or IOException);
+    ae.Handle(ex => ex is OperationCanceledException or IOException or HttpRequestException);
 }
-catch (Exception e) when (e is OperationCanceledException or IOException)
+catch (Exception e) when (e is OperationCanceledException or IOException or HttpRequestException)
 {
 }
 
